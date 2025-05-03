@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:tanari_app/src/screens/menu/acerca_app.dart';
 import 'package:tanari_app/src/screens/menu/configuraciones_app.dart';
-import 'package:tanari_app/src/screens/menu/historial_app.dart';
 import 'package:tanari_app/src/screens/menu/ugv_tanari.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -32,36 +31,78 @@ class HomeScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         child: ListView(
           children: [
-            UserAccountsDrawerHeader(
-              decoration: const BoxDecoration(color: Colors.blueGrey),
-              accountName: const Text('Moises Rivera'),
-              accountEmail: const Text('moiseselizerrivera@gmail.com'),
-              currentAccountPicture: const CircleAvatar(
+            const UserAccountsDrawerHeader(
+              decoration: BoxDecoration(color: Colors.blueGrey),
+              accountName: Text('Moises Rivera'),
+              accountEmail: Text('moiseselizerrivera@gmail.com'),
+              currentAccountPicture: CircleAvatar(
                 backgroundColor: Colors.blueAccent,
-                // foregroundImage: AssetImage(''), // Proporcionar la ruta de la imagen
-                child: Icon(Icons.person,
-                    size: 40, color: Colors.white), // Ejemplo de placeholder
+                child: Icon(Icons.person, size: 40, color: Colors.white),
               ),
             ),
-            ListTile(
+            ExpansionTile(
               leading: const Icon(Icons.car_rental),
               title: const Text('Modos de Operacion'),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const UgvTanari()),
-                );
-              },
+              children: <Widget>[
+                ListTile(
+                  title: const Text('Monitoreo del Dispositivo Portatil'),
+                  onTap: () {
+                    // Navegar a la pantalla de Monitoreo
+                    Navigator.pop(context); // Cierra el drawer
+                    // Navigator.push(context, MaterialPageRoute(builder: (context) => const MonitoreoScreen()));
+                  },
+                ),
+                ListTile(
+                  title: const Text('Control UGV'),
+                  onTap: () {
+                    // Navegar a la pantalla de Control UGV
+                    Navigator.pop(context); // Cierra el drawer
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const UgvTanari()),
+                    );
+                  },
+                ),
+                ListTile(
+                  title: const Text('Acople'),
+                  onTap: () {
+                    // Navegar a la pantalla de Acople
+                    Navigator.pop(context); // Cierra el drawer
+                    // Navigator.push(context, MaterialPageRoute(builder: (context) => const AcopleScreen()));
+                  },
+                ),
+              ],
             ),
-            ListTile(
+            ExpansionTile(
               leading: const Icon(Icons.history),
               title: const Text('Historial'),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const HistorialApp()),
-                );
-              },
+              children: <Widget>[
+                ListTile(
+                  title: const Text('Historial de Monitoreo'),
+                  onTap: () {
+                    // Navegar al historial de monitoreo
+                    Navigator.pop(context); // Cierra el drawer
+                    // Navigator.push(context, MaterialPageRoute(builder: (context) => const HistorialMonitoreoScreen()));
+                  },
+                ),
+                ListTile(
+                  title: const Text('Rutas'),
+                  onTap: () {
+                    // Navegar al historial de rutas
+                    Navigator.pop(context); // Cierra el drawer
+                    // Navigator.push(context, MaterialPageRoute(builder: (context) => const HistorialRutasScreen()));
+                  },
+                ),
+                ListTile(
+                  title: const Text('Ubicación'),
+                  onTap: () {
+                    // Navegar al historial de ubicación
+                    Navigator.pop(context); // Cierra el drawer
+                    // Navigator.push(context, MaterialPageRoute(builder: (context) => const HistorialUbicacionScreen()));
+                  },
+                ),
+              ],
             ),
             ListTile(
               leading: const Icon(Icons.settings),
@@ -95,5 +136,3 @@ class HomeScreen extends StatelessWidget {
         ),
       );
 }
-
-class LedControlScreen {}
