@@ -220,6 +220,7 @@ class BleController extends GetxController {
     }
 
     final connected = connectedDevice.value; // Obtén el valor actual una vez
+    // ignore: unnecessary_null_comparison
     if (connected == null || connected.device == null) {
       Get.snackbar("Error", "Dispositivo no conectado (error interno)",
           backgroundColor: Colors.red);

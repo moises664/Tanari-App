@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:tanari_app/src/screens/menu/acerca_app.dart';
 import 'package:tanari_app/src/screens/menu/configuraciones_app.dart';
-import 'package:tanari_app/src/screens/menu/ugv_tanari.dart';
+import 'package:tanari_app/src/screens/menu/modos_operacion/modo_acople.dart';
+import 'package:tanari_app/src/screens/menu/modos_operacion/modo_ugv.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -11,7 +12,7 @@ class HomeScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'TANARI',
+          'TAnaRi',
           style: TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.bold,
@@ -19,11 +20,40 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
         centerTitle: true,
-        backgroundColor: Colors.indigo,
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
       ),
       drawer: _menuHome(context), // Pasar el contexto si es necesario
       backgroundColor: Colors.white,
-      body: Container(),
+      body: Container(
+        height: double.infinity,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade800,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            children: [
+              Text(
+                'Bienvenidos a',
+                style: TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.lightGreenAccent),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Text('TANARI App',
+                    style: TextStyle(
+                        fontSize: 40,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blueAccent)),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -59,8 +89,7 @@ class HomeScreen extends StatelessWidget {
                     Navigator.pop(context); // Cierra el drawer
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
-                          builder: (context) => const UgvTanari()),
+                      MaterialPageRoute(builder: (context) => const ModoUgv()),
                     );
                   },
                 ),
@@ -68,8 +97,11 @@ class HomeScreen extends StatelessWidget {
                   title: const Text('Acople'),
                   onTap: () {
                     // Navegar a la pantalla de Acople
-                    Navigator.pop(context); // Cierra el drawer
-                    // Navigator.push(context, MaterialPageRoute(builder: (context) => const AcopleScreen()));
+                    // Navigator.pop(context); // Cierra el drawer
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => const ModoAcople()));
                   },
                 ),
               ],
