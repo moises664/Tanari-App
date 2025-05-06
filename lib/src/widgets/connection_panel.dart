@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
+const Color _connectedColor = Colors.green;
+const Color _disconnectedColor = Colors.red;
+const Color _identifierColor = Colors.blue;
+
 class ConnectionPanel extends StatelessWidget {
   final BluetoothDevice? device;
   final int? rssi;
@@ -17,6 +21,13 @@ class ConnectionPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final deviceName = device?.platformName ?? 'Nombre Desconocido';
+    final deviceId = device?.remoteId.str;
+    final truncatedDeviceId = deviceId != null && deviceId.length > 5
+        ? deviceId.substring(deviceId.length - 5)
+        : deviceId ?? '--';
+
     return Card(
       margin: const EdgeInsets.all(12),
       child: Padding(
@@ -25,11 +36,11 @@ class ConnectionPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              device?.platformName ?? 'Nombre Desconocido',
+              deviceName,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: isConnected ? Colors.green : Colors.red,
-                  ),
+              style: textTheme.titleLarge?.copyWith(
+                color: isConnected ? _connectedColor : _disconnectedColor,
+              ),
             ),
             const SizedBox(height: 12),
             Row(
@@ -38,16 +49,12 @@ class ConnectionPanel extends StatelessWidget {
                 _InfoChip(
                   icon: Icons.signal_cellular_alt,
                   label: '${rssi?.toString() ?? '--'} dBm',
-                  color: isConnected ? Colors.green : null,
+                  color: isConnected ? _connectedColor : null,
                 ),
                 _InfoChip(
                   icon: Icons.bluetooth,
-                  label: device?.remoteId.str != null &&
-                          device!.remoteId.str.length > 5
-                      ? device!.remoteId.str
-                          .substring(device!.remoteId.str.length - 5)
-                      : device?.remoteId.str ?? '--',
-                  color: isConnected ? Colors.blue : null,
+                  label: truncatedDeviceId,
+                  color: isConnected ? _identifierColor : null,
                 ),
               ],
             ),
@@ -56,8 +63,8 @@ class ConnectionPanel extends StatelessWidget {
               icon: const Icon(Icons.bluetooth_disabled),
               label: const Text('DESCONECTAR'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.red,
-                side: const BorderSide(color: Colors.red),
+                foregroundColor: _disconnectedColor,
+                side: const BorderSide(color: _disconnectedColor),
               ),
               onPressed: onDisconnect,
             ),

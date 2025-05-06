@@ -12,7 +12,7 @@ class _ModoAcopleState extends State<ModoAcople> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
+        title: const Text(
           'Modo de Acople',
         ),
         backgroundColor: Colors.black,
@@ -20,24 +20,25 @@ class _ModoAcopleState extends State<ModoAcople> {
       ),
       body: Column(
         children: [
-          Monitoreo_Panel(),
+          _monitoreoPanel(), // Llamado a la función corregida
           Container(
-            margin: EdgeInsets.only(left: 20, right: 20, bottom: 10),
+            margin: const EdgeInsets.only(left: 20, right: 20, bottom: 10),
             height: 270,
             width: double.infinity,
             decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
                 color: Colors.blueAccent),
-            child: Text('Control UGV'),
+            child: const Text('Control UGV'),
           )
         ],
       ),
     );
   }
 
-  Container Monitoreo_Panel() {
+  // Corregido el nombre de la función a lowerCamelCase
+  Widget _monitoreoPanel() {
     return Container(
-      margin: EdgeInsets.all(20),
+      margin: const EdgeInsets.all(20),
       height: 430,
       width: double.infinity,
       decoration: BoxDecoration(
@@ -45,8 +46,8 @@ class _ModoAcopleState extends State<ModoAcople> {
           color: Colors.lightGreenAccent.shade100),
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
+          const Padding(
+            padding: EdgeInsets.all(8.0),
             child: Text(
               'Monitoreo: ',
               style: TextStyle(
@@ -56,36 +57,45 @@ class _ModoAcopleState extends State<ModoAcople> {
               textAlign: TextAlign.center,
             ),
           ),
-          monitoreo_co2(),
-          monitoreo_ch4(),
-          monitoreo_temperatura(),
-          monitoreo_humendad(),
+          _monitoreoCo2(), // Llamados a las funciones corregidas
+          _monitoreoCh4(),
+          _monitoreoTemperatura(),
+          _monitoreoHumedad(),
         ],
       ),
     );
   }
 
-  Padding monitoreo_co2() {
+  // Corregidos los nombres de las funciones a lowerCamelCase
+  Widget _monitoreoCo2() {
     return Padding(
+      // Eliminado const
       padding: const EdgeInsets.all(16.0),
       child: Row(
         children: [
-          Text(
-            'CO2:    ',
+          const Text(
+            'CO2:    ',
             style: TextStyle(fontSize: 25),
           ),
-          Container(
-            height: 60,
-            width: 240,
-            decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
-                color: Colors.lightGreen),
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Center(
-                child: Text(
-                  '--  ppm',
-                  style: TextStyle(fontSize: 20, color: Colors.white),
+          const SizedBox(
+            //Espacio entre el texto y el contenedor
+            width: 10,
+          ),
+          Expanded(
+            child: //Usar Expanded para que el contenedor tome el ancho restante
+                Container(
+              height: 60,
+              decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  color: Colors.lightGreen),
+              child: const Padding(
+                //Eliminado const
+                padding: EdgeInsets.all(8.0),
+                child: Center(
+                  child: Text(
+                    '--  ppm',
+                    style: TextStyle(fontSize: 20, color: Colors.white),
+                  ),
                 ),
               ),
             ),
@@ -94,94 +104,116 @@ class _ModoAcopleState extends State<ModoAcople> {
       ),
     );
   }
-}
 
-Padding monitoreo_ch4() {
-  return Padding(
-    padding: const EdgeInsets.all(16.0),
-    child: Row(
-      children: [
-        Text(
-          'CH4:    ',
-          style: TextStyle(fontSize: 25),
-        ),
-        Container(
-          height: 60,
-          width: 240,
-          decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              color: Colors.lightGreen),
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Center(
-              child: Text(
-                '--  ppm',
-                style: TextStyle(fontSize: 20, color: Colors.white),
+  Widget _monitoreoCh4() {
+    return Padding(
+      // Eliminado const
+      padding: const EdgeInsets.all(16.0),
+      child: Row(
+        children: [
+          const Text(
+            'CH4:    ',
+            style: TextStyle(fontSize: 25),
+          ),
+          const SizedBox(
+            //Espacio entre el texto y el contenedor
+            width: 10,
+          ),
+          Expanded(
+            child: Container(
+              height: 60,
+              decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  color: Colors.lightGreen),
+              child: const Padding(
+                //Eliminado const
+                padding: EdgeInsets.all(8.0),
+                child: Center(
+                  child: Text(
+                    '--  ppm',
+                    style: TextStyle(fontSize: 20, color: Colors.white),
+                  ),
+                ),
               ),
             ),
-          ),
-        )
-      ],
-    ),
-  );
-}
+          )
+        ],
+      ),
+    );
+  }
 
-Padding monitoreo_temperatura() {
-  return Padding(
-    padding: const EdgeInsets.all(16.0),
-    child: Row(
-      children: [
-        Text(
-          'Temp:  ',
-          style: TextStyle(fontSize: 25),
-        ),
-        Container(
-          height: 60,
-          width: 240,
-          decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              color: Colors.lightGreen),
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Center(
-              child: Text(
-                '--  ºC',
-                style: TextStyle(fontSize: 20, color: Colors.white),
+  Widget _monitoreoTemperatura() {
+    return Padding(
+      // Eliminado const
+      padding: const EdgeInsets.all(16.0),
+      child: Row(
+        children: [
+          const Text(
+            'Temp:  ',
+            style: TextStyle(fontSize: 25),
+          ),
+          const SizedBox(
+            //Espacio entre el texto y el contenedor
+            width: 10,
+          ),
+          Expanded(
+            child: Container(
+              height: 60,
+              width: 240,
+              decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(18),
+                  color: Colors.lightGreen),
+              child: const Padding(
+                //Eliminado const
+                padding: EdgeInsets.all(8.0),
+                child: Center(
+                  child: Text(
+                    '--  ºC',
+                    style: TextStyle(fontSize: 20, color: Colors.white),
+                  ),
+                ),
               ),
             ),
-          ),
-        )
-      ],
-    ),
-  );
-}
+          )
+        ],
+      ),
+    );
+  }
 
-Padding monitoreo_humendad() {
-  return Padding(
-    padding: const EdgeInsets.all(16.0),
-    child: Row(
-      children: [
-        Text(
-          'Hume:  ',
-          style: TextStyle(fontSize: 25),
-        ),
-        Container(
-          height: 60,
-          width: 240,
-          decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              color: Colors.lightGreen),
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Center(
-              child: Text(
-                '--  %',
-                style: TextStyle(fontSize: 20, color: Colors.white),
+  Widget _monitoreoHumedad() {
+    return Padding(
+      // Eliminado const
+      padding: const EdgeInsets.all(16.0),
+      child: Row(
+        children: [
+          const Text(
+            'Hume:  ',
+            style: TextStyle(fontSize: 25),
+          ),
+          const SizedBox(
+            //Espacio entre el texto y el contenedor
+            width: 10,
+          ),
+          Expanded(
+              child: Container(
+            height: 60,
+            width: 240,
+            decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(18),
+                color: Colors.lightGreen),
+            child: const Padding(
+              //Eliminado const
+              padding: EdgeInsets.all(8.0),
+              child: Center(
+                child: Text(
+                  '--  %',
+                  style: TextStyle(fontSize: 20, color: Colors.white),
+                ),
               ),
             ),
-          ),
-        )
-      ],
-    ),
-  );
+          ))
+        ],
+      ),
+    );
+  }
 }
