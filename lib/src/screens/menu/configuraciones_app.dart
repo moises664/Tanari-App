@@ -29,12 +29,15 @@ class ConfiguracionesApp extends StatelessWidget {
         ],
       ),
       body: Obx(() {
-        final connectedDevice = bleController.connectedDevice.value;
-        if (connectedDevice != null) {
+        if (bleController.connectedDevices.isNotEmpty) {
+          // Usa firstKey para obtener el ID del primer dispositivo conectado.
+          final deviceId = bleController.connectedDevices.keys.first;
+          final connectedDevice = bleController.connectedDevices[deviceId]!;
+          final rssi = bleController.rssiValues[deviceId] ?? 0;
           return ConnectionPanel(
-            device: connectedDevice.device,
-            rssi: bleController.rssi.value ?? 0,
-            onDisconnect: bleController.cleanupConnection,
+            device: connectedDevice,
+            rssi: rssi,
+            onDisconnect: () => bleController.disconnectDevice(deviceId),
             isConnected: true,
           );
         } else {
@@ -43,17 +46,24 @@ class ConfiguracionesApp extends StatelessWidget {
       }),
       floatingActionButton: Obx(
         () => FloatingActionButton(
-          onPressed: bleController.isConnected
-              ? bleController.toggleLed
-              : null, // onPressed será null si no está conectado (deshabilitado)
-          backgroundColor:
-              bleController.isConnected ? null : Colors.grey.shade300,
+          onPressed: bleController.connectedDevices.isNotEmpty
+              ? () {
+                  // Enviar el id del primer dispositivo conectado.
+                  final deviceId = bleController.connectedDevices.keys.first;
+                  bleController.sendData(
+                      deviceId, bleController.ledStateUGV.value ? 'L' : 'H');
+                }
+              : null,
+          backgroundColor: bleController.connectedDevices.isNotEmpty
+              ? null
+              : Colors.grey.shade300,
           child: Icon(
-            bleController.ledState.value ? Icons.toggle_on : Icons.toggle_off,
-            color: bleController.isConnected
-                ? null
-                : Colors.grey, // Cambia el color del icono
-          ), // Cambia el color del fondo
+            bleController.ledStateUGV.value
+                ? Icons.toggle_on
+                : Icons.toggle_off,
+            color:
+                bleController.connectedDevices.isNotEmpty ? null : Colors.grey,
+          ),
         ),
       ),
     );
@@ -68,19 +78,22 @@ class _DeviceList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() => ListView.builder(
-          // *** ENVOLVIENDO TODO EL ListView.builder CON Obx ***
-          itemCount: controller.foundDevices.length,
-          itemBuilder: (ctx, index) {
-            final foundDevice = controller.foundDevices[index];
-            return DeviceTile(
-              device: foundDevice.device,
-              rssi: foundDevice.rssi,
-              isConnected: foundDevice.device ==
-                  controller.connectedDevice.value?.device,
-              onConnect: () => controller.connectToDevice(foundDevice),
-            );
-          },
-        ));
+    return Obx(() {
+      // Wrap the ListView.builder with Obx
+      return ListView.builder(
+        itemCount: controller.foundDevices.length,
+        itemBuilder: (ctx, index) {
+          final foundDevice = controller.foundDevices[index];
+          final isConnected = controller.connectedDevices
+              .containsKey(foundDevice.device.remoteId.str);
+          return DeviceTile(
+            device: foundDevice.device,
+            rssi: foundDevice.rssi,
+            isConnected: isConnected,
+            onConnect: () => controller.connectToDevice(foundDevice),
+          );
+        },
+      );
+    });
   }
 }
