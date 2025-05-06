@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:get/get.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:tanari_app/src/controllers/services/permissions_service.dart';
+import 'package:logger/logger.dart';
 
 class FoundDevice {
   final BluetoothDevice device;
@@ -13,7 +13,6 @@ class FoundDevice {
 
   FoundDevice(this.device, this.rssi);
 
-  // Para comparar dispositivos por ID (evita duplicados en la lista)
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -23,262 +22,379 @@ class FoundDevice {
 
   @override
   int get hashCode => device.remoteId.hashCode;
+
+  @override
+  String toString() {
+    return 'FoundDevice{device: ${device.platformName}, id: ${device.remoteId}, rssi: $rssi}';
+  }
 }
 
 class BleController extends GetxController {
-  // UUIDs del servicio y característica
+  // UUIDs del servicio y características
   static const serviceUuid = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
-  static const characteristicUuid = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+  static const characteristicUuidUGV = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+  static const characteristicUuidPortableNotify =
+      "beb5483e-36e1-4688-b7f5-ea07361b26a9";
 
-  // Estados reactivos
-  final foundDevices =
-      <FoundDevice>[].obs; // Lista observable de dispositivos encontrados.
-  final connectedDevice =
-      Rxn<FoundDevice>(); // Dispositivo conectado actual (puede ser nulo).
-  final isScanning = false.obs; // Estado del escaneo BLE.
-  final ledState = false.obs; // Estado del LED (encendido/apagado).
-  final rssi = Rxn<int>(); // Intensidad de la señal Bluetooth.
+  // Estados reactivos (observables)
+  final foundDevices = <FoundDevice>[].obs;
+  final connectedDevices = <String, BluetoothDevice>{}.obs;
+  final connectedCharacteristics = <String, BluetoothCharacteristic>{}.obs;
+  final isScanning = false
+      .obs; // Usar RxBool para manejar el estado de escaneo de forma reactiva
+  final ledStateUGV = false.obs;
+  final portableData = <String, dynamic>{}.obs;
+  final rssiValues = <String, int?>{}.obs;
 
-  // Subscripciones
+  // Subscripciones y timers
   StreamSubscription<List<ScanResult>>? _scanSubscription;
-  StreamSubscription<BluetoothConnectionState>? _connectionSubscription;
-  StreamSubscription<List<int>>? _valueSubscription;
-  Timer? _rssiTimer;
-  Timer? _updateTimer;
-  bool get isConnected => connectedDevice.value?.device.isConnected ?? false;
+  final _connectionSubscriptions =
+      <String, StreamSubscription<BluetoothConnectionState>>{};
+  final _valueSubscriptions = <String, StreamSubscription<List<int>>>{};
+  final _rssiTimers = <String, Timer>{};
+  final Logger _logger = Logger();
 
-  // Inicialización y Permisos
+  // Dispositivos específicos
+  String? ugvDeviceId;
+  BluetoothCharacteristic? ugvCharacteristic;
+  String? portableDeviceId;
+  BluetoothCharacteristic? portableCharacteristic;
+
+  // Verifica si un dispositivo está conectado
+  bool isDeviceConnected(String deviceId) =>
+      connectedDevices.containsKey(deviceId) &&
+      // ignore: unrelated_type_equality_checks
+      (connectedDevices[deviceId]?.connectionState ==
+          BluetoothConnectionState.connected);
+
   @override
   void onInit() {
     super.onInit();
     _checkPermissions();
   }
 
+  // Verifica y solicita los permisos necesarios.
   Future<void> _checkPermissions() async {
     try {
-      final deviceInfo = DeviceInfoPlugin();
-      final androidInfo = await deviceInfo.androidInfo;
+      if (Platform.isAndroid) {
+        final androidInfo = await DeviceInfoPlugin().androidInfo;
+        _logger.i(
+            "Android SDK Version: ${androidInfo.version.sdkInt}"); // Agregado logging
+        if (androidInfo.version.sdkInt <= 30) {
+          // Para Android <= 11, se necesita locationWhenInUse
+          final locationStatus = await Permission.locationWhenInUse.request();
+          if (locationStatus != PermissionStatus.granted) {
+            _logger.e(
+                "Permiso de ubicación denegado para Android ${androidInfo.version.sdkInt}");
+            Get.snackbar("Error",
+                "Se requiere permiso de ubicación para usar Bluetooth.");
+            return;
+          }
+        } else {
+          // Para Android 12 y superior, se necesitan permisos de Bluetooth específicos
+          final bluetoothScanStatus = await Permission.bluetoothScan.request();
+          final bluetoothConnectStatus =
+              await Permission.bluetoothConnect.request();
 
-      if (Platform.isAndroid && androidInfo.version.sdkInt <= 30) {
-        final status = await Permission.locationWhenInUse.request();
-        if (!status.isGranted) {
-          Get.snackbar("Error", "Se requiere permiso de ubicación");
+          if (bluetoothScanStatus != PermissionStatus.granted ||
+              bluetoothConnectStatus != PermissionStatus.granted) {
+            _logger.e(
+                "Permisos de Bluetooth Scan/Connect denegados para Android ${androidInfo.version.sdkInt}");
+            Get.snackbar("Error",
+                "Se requieren permisos de Bluetooth para escanear y conectar.");
+            return;
+          }
+        }
+      } else if (Platform.isIOS) {
+        // En iOS, solo se necesita el permiso de Bluetooth
+        final bluetoothStatus = await Permission.bluetooth.request();
+        if (bluetoothStatus != PermissionStatus.granted) {
+          _logger.e("Permiso de Bluetooth denegado para iOS");
+          Get.snackbar("Error", "Se requiere permiso de Bluetooth.");
+          return;
         }
       }
-
-      // Solicita los permisos de BLE
-      await PermissionsService.requestBlePermissions();
+      // Verifica permisos de Bluetooth usando el servicio de permisos
+      final blePermissionsGranted =
+          await PermissionsService.requestBlePermissions();
+      if (!blePermissionsGranted) {
+        _logger.e("Permisos de Bluetooth denegados");
+        Get.snackbar("Error", "Permisos de Bluetooth denegados.");
+        return;
+      }
     } catch (e) {
+      _logger.e("Error en _checkPermissions: ${e.toString()}");
       Get.snackbar("Error", "Error en permisos: ${e.toString()}");
     }
   }
 
-  // Escaneo de Dispositivos
+  // Inicia el escaneo de dispositivos BLE
   Future<void> startScan() async {
     if (isScanning.value) {
-      print("Escaneo ya en curso, retornando.");
+      _logger.i("Escaneo ya en curso.");
       return;
     }
     try {
-      // Verificar estado inicial
       var state = await FlutterBluePlus.adapterState.first;
       if (state != BluetoothAdapterState.on) {
-        FlutterBluePlus.turnOn(); // Abre configuración Bluetooth en Android
-
-        // Espera máximo 15 segundos a que se active
-        state = await FlutterBluePlus.adapterState
-            .firstWhere((s) => s == BluetoothAdapterState.on)
-            .timeout(const Duration(seconds: 15));
+        _logger.i("Bluetooth is off, turning it on...");
+        try {
+          await FlutterBluePlus.turnOn(
+              timeout: const Duration(seconds: 10).inMilliseconds);
+          state = await FlutterBluePlus.adapterState
+              .firstWhere((s) => s == BluetoothAdapterState.on);
+          _logger.i("Bluetooth is now on.");
+        } on TimeoutException {
+          Get.snackbar("Error", "Bluetooth no se activó a tiempo.");
+          isScanning.value = false;
+          return;
+        } catch (e) {
+          _logger.e("Error al encender Bluetooth: $e");
+          Get.snackbar("Error", "Error al encender Bluetooth: $e");
+          isScanning.value = false;
+          return;
+        }
       }
 
-      // Iniciar escaneo
       isScanning.value = true;
-      print("Iniciando escaneo BLE..."); // Añadido log
+      _logger.i("Iniciando escaneo BLE...");
+
       _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
-        print(
-            "Se recibieron ${results.length} resultados de escaneo."); // Añadido log
         final newDevices =
             results.map((r) => FoundDevice(r.device, r.rssi)).toSet().toList();
-        // *** MODIFICACIÓN IMPORTANTE: ***
-        // Asegurarse de que la lista observable se actualice correctamente.
-        // `assignAll` notifica a los listeners (la UI) sobre el cambio.
+        //Log the devices found
+        for (var newDevice in newDevices) {
+          _logger.i(
+              "Dispositivo encontrado: ${newDevice.device.platformName} (${newDevice.device.remoteId}), RSSI: ${newDevice.rssi}");
+        }
         foundDevices.assignAll(newDevices);
-        print(
-            "Lista de dispositivos encontrados actualizada: ${foundDevices.value.length}"); // Añadido log
-        foundDevices.forEach((device) {
-          print(
-              "Dispositivo encontrado: ${device.device.platformName} (${device.device.remoteId})");
-        });
       }, onError: (e) {
-        print("Error durante el escaneo: $e"); // Añadido manejo de error
+        _logger.e("Error durante el escaneo: $e");
+        Get.snackbar("Error", "Error durante el escaneo: $e");
         isScanning.value = false;
       }, onDone: () {
-        print("Escaneo BLE completado."); // Añadido log de finalización
         isScanning.value = false;
+        _logger.i("Escaneo finalizado.");
       });
+
       await FlutterBluePlus.startScan(
-        timeout: const Duration(seconds: 10),
-        withServices: [Guid(serviceUuid)], // Filtrar por el UUID de tu servicio
+        timeout: const Duration(seconds: 15),
+        withServices: [Guid(serviceUuid)],
       );
-      // No establecer isScanning a false aquí, se maneja en onDone y onError del listener
-    } on TimeoutException {
-      Get.snackbar("Error", "El Bluetooth no se activó a tiempo");
-      isScanning.value = false;
     } catch (e) {
+      _logger.e("Error en startScan: ${e.toString()}");
       Get.snackbar("Error", e.toString());
       isScanning.value = false;
     }
   }
 
+  // Detiene el escaneo de dispositivos BLE
   void stopScan() {
+    if (!isScanning.value) return;
     FlutterBluePlus.stopScan();
     _scanSubscription?.cancel();
-    _updateTimer?.cancel();
+    _rssiTimers.forEach((key, timer) => timer.cancel());
     isScanning.value = false;
-    print("Escaneo BLE detenido."); // Añadido log
+    _logger.i("Escaneo detenido.");
   }
 
-  //  Conexión a Dispositivo
+  // Conecta a un dispositivo BLE
   Future<void> connectToDevice(FoundDevice foundDevice) async {
-    BluetoothDevice? device; // Declarar aquí
+    final deviceId = foundDevice.device.remoteId.str;
+    if (connectedDevices.containsKey(deviceId)) {
+      Get.snackbar("Info", "Dispositivo ya conectado.");
+      return;
+    }
     try {
-      device = foundDevice.device; // Extrae el BluetoothDevice
-      await device.connect(
-        timeout: const Duration(seconds: 5), //
-      ); // Conecta al dispositivo.
-
-      final services = await device.discoverServices(); // Descubre servicios.
-      final service = services.firstWhere(
-        (s) => s.uuid == Guid(serviceUuid),
-        orElse: () => throw Exception('Servicio no encontrado'),
-      );
-
-      // Busca el servicio específico por UUID.
-      final characteristic = service.characteristics.firstWhere(
-        (c) => c.uuid == Guid(characteristicUuid),
-        orElse: () => throw Exception('Característica no encontrada'),
-      );
-
-      _setupNotifications(characteristic);
-      _startRssiUpdates(device);
+      final device = foundDevice.device;
+      await device.connect(timeout: const Duration(seconds: 15));
+      connectedDevices[deviceId] = device;
       _monitorConnectionState(device);
-
-      // Encuentra la característica para controlar el LED.
-      connectedDevice.value = FoundDevice(device, await device.readRssi());
-      ledState.value = (await characteristic.read())[0] == 1;
+      await _discoverServices(device);
+      _startRssiUpdates(device);
     } catch (e) {
-      Get.snackbar("Error", e.toString(), backgroundColor: Colors.red);
-      if (device != null) {
-        await device.disconnect();
-      }
+      _logger.e(
+          "Error al conectar: $e. Dispositivo: ${foundDevice.device.platformName} (${foundDevice.device.remoteId})");
+      Get.snackbar("Error", "Error al conectar: $e");
+      _cleanupDeviceConnection(deviceId);
     }
   }
 
-  // Notificaciones: Escucha cambios en la característica BLE y actualiza ledState.
-  void _setupNotifications(BluetoothCharacteristic characteristic) {
-    _valueSubscription?.cancel();
-    _valueSubscription = characteristic.onValueReceived.listen((value) {
-      if (value.isNotEmpty) ledState.value = value[0] == 1;
-    });
-    characteristic.setNotifyValue(true);
-  }
-
-  // RSSI: Mide intensidad de señal cada 2 segundos para monitorear calidad de conexión.
-  void _startRssiUpdates(BluetoothDevice device) {
-    _rssiTimer?.cancel();
-    _rssiTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
-      try {
-        if (connectedDevice.value?.device == device && device.isConnected) {
-          // Actualiza el RSSI en la lista foundDevices
-          final index = foundDevices.indexWhere((d) => d.device == device);
-          if (index != -1) {
-            final updatedDevice = FoundDevice(device, await device.readRssi());
-            // Actualiza la lista foundDevices solo si el dispositivo todavía está en la lista
-            if (index < foundDevices.length) {
-              foundDevices[index] = updatedDevice;
-            }
-            // Actualiza el RSSI del dispositivo conectado si es el mismo
-            if (connectedDevice.value?.device == device) {
-              connectedDevice.value = updatedDevice;
-              rssi.value = updatedDevice.rssi;
+  // Descubre los servicios y características de un dispositivo
+  Future<void> _discoverServices(BluetoothDevice device) async {
+    final deviceId = device.remoteId.str;
+    try {
+      final services = await device.discoverServices();
+      if (services.isEmpty) {
+        _logger.w(
+            "No se encontraron servicios para el dispositivo: ${device.platformName} (${device.remoteId})");
+        Get.snackbar(
+            "Advertencia", "No se encontraron servicios para el dispositivo.");
+        disconnectDevice(deviceId);
+        return;
+      }
+      for (BluetoothService service in services) {
+        if (service.uuid.toString().toLowerCase() == serviceUuid) {
+          for (BluetoothCharacteristic char in service.characteristics) {
+            final charUuid = char.uuid.toString().toLowerCase();
+            if (charUuid == characteristicUuidUGV) {
+              ugvCharacteristic = char;
+              connectedCharacteristics[deviceId] = char;
+              _setupNotifications(deviceId, char);
+              _logger.i('Característica UGV encontrada: ${char.uuid}');
+            } else if (charUuid == characteristicUuidPortableNotify) {
+              portableCharacteristic = char;
+              connectedCharacteristics[deviceId] = char;
+              _setupNotifications(deviceId, char);
+              _logger.i('Característica Portátil encontrada: ${char.uuid}');
             }
           }
         }
-      } catch (e) {
-        debugPrint('Error RSSI: $e');
       }
-    });
-  }
-
-  //  Control del Led
-  //  Control del Led
-  Future<void> toggleLed() async {
-    if (!isConnected) {
-      Get.snackbar("Info", "Por favor, conéctate a un dispositivo primero.",
-          backgroundColor: Colors.orange);
-      return; // Sale de la función si no hay dispositivo conectado
-    }
-
-    final connected = connectedDevice.value; // Obtén el valor actual una vez
-    // ignore: unnecessary_null_comparison
-    if (connected == null || connected.device == null) {
-      Get.snackbar("Error", "Dispositivo no conectado (error interno)",
-          backgroundColor: Colors.red);
-      return; // Sale de la función si no hay dispositivo conectado
-    }
-
-    if (!connected.device.isConnected) {
-      Get.snackbar("Error", "Dispositivo desconectado",
-          backgroundColor: Colors.red);
-      return; // Sale si el dispositivo no está conectado
-    }
-
-    try {
-      final device = connected.device; // Ahora 'device' no será null aquí
-      final services = await device.discoverServices();
-      final service = services.firstWhere((s) => s.uuid == Guid(serviceUuid));
-      final characteristic = service.characteristics.firstWhere(
-        (c) => c.uuid == Guid(characteristicUuid),
-      );
-
-      final newValue = !ledState.value;
-      await characteristic.write([newValue ? 1 : 0]);
-      ledState.value = newValue;
+      if (ugvCharacteristic == null && portableCharacteristic == null) {
+        _logger.w(
+            "No se encontraron las características requeridas para el dispositivo: ${device.platformName} (${device.remoteId})");
+        Get.snackbar(
+            "Advertencia", "No se encontraron las características requeridas.");
+        disconnectDevice(deviceId);
+      }
     } catch (e) {
-      Get.snackbar("Error", e.toString(), backgroundColor: Colors.red);
-      cleanupConnection();
+      _logger.e("Error al descubrir servicios: $e");
+      Get.snackbar("Error", "Error al descubrir servicios: $e");
+      disconnectDevice(deviceId);
     }
   }
 
-  // Gestión de Conexión: Detecta desconexiones automaticamente
-  void _monitorConnectionState(BluetoothDevice device) {
-    _connectionSubscription?.cancel();
-    _connectionSubscription = device.connectionState.listen((state) {
-      if (state == BluetoothConnectionState.disconnected) {
-        cleanupConnection();
-        Get.snackbar("Info", "Dispositivo desconectado");
+  // Configura las notificaciones para una característica
+  void _setupNotifications(
+      String deviceId, BluetoothCharacteristic characteristic) {
+    _valueSubscriptions[deviceId]?.cancel();
+    try {
+      characteristic.setNotifyValue(true);
+      _valueSubscriptions[deviceId] =
+          characteristic.onValueReceived.listen((value) {
+        final charUuid = characteristic.uuid.toString().toLowerCase();
+        if (charUuid == characteristicUuidPortableNotify) {
+          final dataString = String.fromCharCodes(value);
+          portableData.value = {'raw': dataString};
+          _logger.i('Datos del Portátil ($deviceId): $dataString');
+        } else if (charUuid == characteristicUuidUGV) {
+          ledStateUGV.value = value.isNotEmpty && value[0] == 1;
+          _logger.i('Estado del UGV ($deviceId): ${value[0]}');
+        }
+      }, onError: (error) {
+        _logger.e("Error en _setupNotifications: $error");
+        Get.snackbar("Error", "Error en la recepción de datos: $error");
+      });
+    } catch (e) {
+      _logger.e("Error al configurar notificaciones: $e");
+      Get.snackbar("Error", "Error al configurar notificaciones: $e");
+      disconnectDevice(deviceId);
+    }
+  }
+
+  // Envía datos a un dispositivo BLE
+  Future<void> sendData(String deviceId, String data) async {
+    if (!isDeviceConnected(deviceId)) {
+      Get.snackbar("Error", "Dispositivo no conectado");
+      return;
+    }
+    final characteristic = connectedCharacteristics[deviceId];
+    if (characteristic == null) {
+      Get.snackbar("Error", "Característica no encontrada");
+      return;
+    }
+    try {
+      await characteristic.write(data.codeUnits, withoutResponse: true);
+      _logger.i('Dato enviado a $deviceId: $data');
+      if (characteristic.uuid.toString().toLowerCase() ==
+          characteristicUuidUGV) {
+        ledStateUGV.value = data == 'H';
+      }
+    } catch (e) {
+      _logger.e("Error al enviar datos: $e");
+      Get.snackbar("Error", "Error al enviar datos: $e");
+      _cleanupDeviceConnection(deviceId);
+    }
+  }
+
+  // Inicia la lectura periódica del RSSI de un dispositivo
+  void _startRssiUpdates(BluetoothDevice device) {
+    final deviceId = device.remoteId.str;
+    _rssiTimers[deviceId] =
+        Timer.periodic(const Duration(seconds: 2), (_) async {
+      try {
+        if (isDeviceConnected(deviceId)) {
+          final rssiValue = await device.readRssi();
+          rssiValues[deviceId] = rssiValue;
+          final index = foundDevices.indexWhere((d) => d.device == device);
+          if (index != -1) {
+            foundDevices[index] = FoundDevice(device, rssiValue);
+          }
+          _logger.i('RSSI de ${device.platformName}: $rssiValue');
+        }
+      } catch (e) {
+        _logger.e('Error RSSI: $e');
       }
     });
   }
 
-  // Limpia recursos y restablece variables.
-  void cleanupConnection() {
-    _rssiTimer?.cancel();
-    _valueSubscription?.cancel();
-    _connectionSubscription?.cancel();
-    if (connectedDevice.value?.device != null) {
-      connectedDevice.value?.device.disconnect();
-    }
-    connectedDevice.value = null;
-    ledState.value = false;
-    rssi.value = null;
+  // Monitorea el estado de la conexión de un dispositivo
+  void _monitorConnectionState(BluetoothDevice device) {
+    final deviceId = device.remoteId.str;
+    _connectionSubscriptions[deviceId] = device.connectionState.listen((state) {
+      _logger.i('Estado de conexión de ${device.platformName}: $state');
+      if (state == BluetoothConnectionState.disconnected) {
+        _cleanupDeviceConnection(deviceId);
+        Get.snackbar("Info", "${device.platformName} desconectado");
+      }
+    }, onError: (error) {
+      _logger.e("Error en _monitorConnectionState: $error");
+      Get.snackbar("Error", "Error en la conexión del dispositivo: $error");
+      _cleanupDeviceConnection(deviceId);
+    });
   }
 
-  // Ciclo de Vida: Cancela todas las operaciones activas al destruir el controlador para evitar memory leaks.
+  // Limpia el estado de la conexión de un dispositivo
+  void _cleanupDeviceConnection(String deviceId) {
+    _logger.i('Limpiando conexión para el dispositivo: $deviceId');
+    _rssiTimers[deviceId]?.cancel();
+    _valueSubscriptions[deviceId]?.cancel();
+    _connectionSubscriptions[deviceId]?.cancel();
+    connectedDevices.remove(deviceId);
+    connectedCharacteristics.remove(deviceId);
+    rssiValues.remove(deviceId);
+    if (connectedDevices.isEmpty) {
+      ledStateUGV.value = false;
+    }
+  }
+
+  // Desconecta un dispositivo BLE
+  void disconnectDevice(String deviceId) async {
+    if (connectedDevices.containsKey(deviceId)) {
+      try {
+        await connectedDevices[deviceId]?.disconnect();
+        _cleanupDeviceConnection(deviceId);
+        final deviceName =
+            connectedDevices[deviceId]?.platformName ?? "Dispositivo";
+        Get.snackbar("Info", "$deviceName desconectado");
+      } catch (e) {
+        _logger.e("Error al desconectar el dispositivo: $e");
+        Get.snackbar("Error", "Error al desconectar el dispositivo: $e");
+        _cleanupDeviceConnection(deviceId);
+      }
+    }
+  }
+
   @override
   void onClose() {
+    _logger.i('Cerrando BleController...');
     stopScan();
-    cleanupConnection();
+    _rssiTimers.forEach((key, timer) => timer.cancel());
+    _valueSubscriptions.forEach((key, sub) => sub.cancel());
+    _connectionSubscriptions.forEach((key, sub) => sub.cancel());
+    connectedDevices.forEach((key, device) => device.disconnect());
+    connectedDevices.clear();
     super.onClose();
   }
 }
