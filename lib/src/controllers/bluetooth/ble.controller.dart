@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:logger/logger.dart';
 import 'package:tanari_app/src/controllers/services/permissions_service.dart'; // Importa el paquete logger
+import 'package:flutter/foundation.dart'; // Import for kDebugMode
 
 class FoundDevice {
   final BluetoothDevice device;
@@ -282,7 +283,16 @@ class BleController extends GetxController {
       final characteristic = connectedCharacteristics[deviceId];
       if (characteristic != null) {
         try {
-          await characteristic.write(data.codeUnits, withoutResponse: true);
+          // Codificar la cadena a una lista de bytes (Uint8List)
+          List<int> bytes = data.codeUnits;
+
+          // *** MODIFICACIÓN IMPORTANTE: ***
+          // Usar write con withoutResponse: false para asegurar la escritura con respuesta.
+          await characteristic.write(bytes, withoutResponse: false);
+
+          if (kDebugMode) {
+            print('Dato enviado a $deviceId: $data');
+          }
           _logger.i('Dato enviado a $deviceId: $data');
           // Actualiza el estado del LED solo si la característica es la del UGV
           if (characteristic.uuid.toString().toLowerCase() ==
