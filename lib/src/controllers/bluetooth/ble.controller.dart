@@ -33,14 +33,14 @@ class BleController extends GetxController {
       "beb5483e-36e1-4688-b7f5-ea07361b26a9";
 
   // Comandos para el UGV
-  static const String moveForward = 'F';
-  static const String moveBack = 'B';
-  static const String moveRight = 'R';
-  static const String moveLeft = 'L';
-  static const String stop = 'S';
-  static const String startRecording = 'G';
-  static const String stopRecording = 'N';
-  static const String startAutoMode = 'A';
+  static const String moveForward = 'F'; //Hacia Adelante
+  static const String moveBack = 'B'; //Hacia Atras
+  static const String moveRight = 'R'; //A la Derecha
+  static const String moveLeft = 'L'; //A la Izquirda
+  static const String stop = 'S'; //Parar
+  static const String startRecording = 'G'; //Guardar Recorrido
+  static const String stopRecording = 'N'; //Parar el Guardado de Recorrido.
+  static const String startAutoMode = 'A'; //Comenzar el Modo Automatico
 
   // Estados reactivos
   final foundDevices = <FoundDevice>[].obs;
