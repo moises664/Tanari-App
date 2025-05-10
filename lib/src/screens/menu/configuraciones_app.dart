@@ -13,7 +13,8 @@ class ConfiguracionesApp extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.blueAccent.shade700,
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.blueAccent.shade700,
         title: const Text('Control BLE'),
         actions: [
           Obx(

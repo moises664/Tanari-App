@@ -20,7 +20,7 @@ class _ModoAcopleState extends State<ModoAcople> {
       ),
       body: Column(
         children: [
-          _monitoreoPanel(), // Llamado a la función corregida
+          monitoreoPanel(), // Llamado a la función corregida
           Container(
             margin: const EdgeInsets.only(left: 20, right: 20, bottom: 10),
             height: 270,
@@ -36,7 +36,7 @@ class _ModoAcopleState extends State<ModoAcople> {
   }
 
   // Corregido el nombre de la función a lowerCamelCase
-  Widget _monitoreoPanel() {
+  Widget monitoreoPanel() {
     return Container(
       margin: const EdgeInsets.all(20),
       height: 430,

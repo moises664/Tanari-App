@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:tanari_app/src/controllers/bluetooth/ble.controller.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+/// Pantalla principal para el control manual y automático del UGV
 class ModoUgv extends StatefulWidget {
   const ModoUgv({super.key});
 
@@ -10,15 +12,24 @@ class ModoUgv extends StatefulWidget {
   State<ModoUgv> createState() => _ModoUgvState();
 }
 
+/// Estado que gestiona la lógica de control y visualización del UGV
 class _ModoUgvState extends State<ModoUgv> {
+  // Controlador Bluetooth
   final BleController bleController = Get.find<BleController>();
+
+  // Variables para el trazado del recorrido
   List<Offset> recorridoPoints = [Offset(0, 0)];
   Offset currentPosition = Offset(0, 0);
   double stepSize = 20.0;
+
+  // Identificador del dispositivo UGV conectado
   String? ugvDeviceId;
-  // Timer para el envío continuo de comandos
+
+  // Timer para movimiento continuo
   Timer? _movementTimer;
-  String _currentCommand = BleController.stop; // Inicializa con 'S' para parado
+
+  // Comando actual y estado de grabación
+  String _currentCommand = BleController.stop;
   final RxBool _isRecording = false.obs;
 
   @override
@@ -28,13 +39,14 @@ class _ModoUgvState extends State<ModoUgv> {
     _bindRecordingState();
   }
 
+  /// Vincula el estado de grabación del controlador BLE con el estado local
   void _bindRecordingState() {
-    // Vincula la variable local _isRecording con el valor de isRecording en el BleController
     ever(bleController.isRecording, (recording) {
       _isRecording.value = recording;
     });
   }
 
+  /// Inicializa el ID del dispositivo UGV desde el controlador BLE
   void _initUgvDeviceId() {
     if (bleController.connectedDevices.isNotEmpty) {
       ugvDeviceId = bleController.connectedDevices.keys.firstWhere(
@@ -45,6 +57,7 @@ class _ModoUgvState extends State<ModoUgv> {
       );
     }
 
+    // Actualiza el ID si se conecta un nuevo dispositivo
     ever(bleController.connectedDevices, (devices) {
       if (ugvDeviceId == null && devices.isNotEmpty) {
         ugvDeviceId = devices.keys.firstWhere(
@@ -57,62 +70,65 @@ class _ModoUgvState extends State<ModoUgv> {
     });
   }
 
+  /// Inicia el movimiento en una dirección específica
   void _startMovement(String command) {
-    _currentCommand = command; // Actualiza el comando actual
+    _currentCommand = command;
     _sendMovementCommand();
-    // Cancela el timer anterior si existe
     _movementTimer?.cancel();
-    // Inicia un timer para enviar el comando continuamente cada 100ms
+    // Configura un timer para enviar comandos continuos cada 100ms
     _movementTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
       _sendMovementCommand();
+      _updatePosition(command);
     });
   }
 
+  /// Detiene el movimiento del UGV
   void _stopMovement() {
-    _currentCommand =
-        BleController.stop; // Establece el comando a 'S' para parar
+    _currentCommand = BleController.stop;
     _sendMovementCommand();
     _movementTimer?.cancel();
   }
 
+  /// Envía el comando actual al dispositivo BLE
   void _sendMovementCommand() {
     if (ugvDeviceId != null && bleController.isDeviceConnected(ugvDeviceId!)) {
       bleController.sendData(ugvDeviceId!, _currentCommand);
-      if (_isRecording.value &&
-          _currentCommand != BleController.stop &&
-          _currentCommand != BleController.startRecording &&
-          _currentCommand != BleController.stopRecording &&
-          _currentCommand != BleController.startAutoMode) {
-        _updatePosition(_currentCommand);
-      }
     } else {
       Get.snackbar("Advertencia", "No se ha conectado al UGV.");
     }
   }
 
+  /// Actualiza la posición del recorrido en el mapa
   void _updatePosition(String direction) {
     setState(() {
       Offset lastPosition = recorridoPoints.last;
+      Offset newPosition = lastPosition;
+
       switch (direction) {
         case BleController.moveForward:
-          currentPosition = Offset(lastPosition.dx, lastPosition.dy - stepSize);
+          newPosition = Offset(lastPosition.dx, lastPosition.dy - stepSize);
           break;
         case BleController.moveBack:
-          currentPosition = Offset(lastPosition.dx, lastPosition.dy + stepSize);
+          newPosition = Offset(lastPosition.dx, lastPosition.dy + stepSize);
           break;
         case BleController.moveLeft:
-          currentPosition = Offset(lastPosition.dx - stepSize, lastPosition.dy);
+          newPosition = Offset(lastPosition.dx - stepSize, lastPosition.dy);
           break;
         case BleController.moveRight:
-          currentPosition = Offset(lastPosition.dx + stepSize, lastPosition.dy);
+          newPosition = Offset(lastPosition.dx + stepSize, lastPosition.dy);
           break;
         default:
           return;
       }
-      recorridoPoints = List.from(recorridoPoints)..add(currentPosition);
+
+      if (newPosition != lastPosition) {
+        recorridoPoints = List.from(recorridoPoints)..add(newPosition);
+        currentPosition = newPosition;
+      }
     });
   }
 
+  /// Activa/desactiva la grabación del recorrido
   void _toggleRecording() {
     if (ugvDeviceId != null) {
       bleController.toggleRecording(ugvDeviceId!);
@@ -121,6 +137,7 @@ class _ModoUgvState extends State<ModoUgv> {
     }
   }
 
+  /// Activa el modo de funcionamiento automático
   void _startAutomaticMode() {
     if (ugvDeviceId != null) {
       bleController.startAutomaticMode(ugvDeviceId!);
@@ -129,124 +146,223 @@ class _ModoUgvState extends State<ModoUgv> {
     }
   }
 
+  /// Reinicia el mapa de recorrido
+  void _resetRecorrido() {
+    setState(() {
+      recorridoPoints = [Offset(0, 0)];
+      currentPosition = Offset(0, 0);
+    });
+  }
+
   @override
   void dispose() {
     _movementTimer?.cancel();
     super.dispose();
   }
 
+  //----------------------------------------------------------------------------
+  // SECCIÓN DE INTERFAZ DE USUARIO
+  //----------------------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
+    //final screenSize = MediaQuery.of(context).size;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Control UGV'),
+        title: const Text('Modo UGV'),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.blueAccent,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+      body: Container(
+        decoration: const BoxDecoration(color: Colors.white),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'Control Manual',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-            // Controles de movimiento
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                GestureDetector(
-                  onTapDown: (_) => _startMovement(BleController.moveForward),
-                  onTapUp: (_) => _stopMovement(),
-                  onTapCancel: () => _stopMovement(),
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    child: const Text('↑'),
-                  ),
-                ),
-              ],
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                GestureDetector(
-                  onTapDown: (_) => _startMovement(BleController.moveLeft),
-                  onTapUp: (_) => _stopMovement(),
-                  onTapCancel: () => _stopMovement(),
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    child: const Text('←'),
-                  ),
-                ),
-                const SizedBox(width: 20),
-                ElevatedButton(
-                  onPressed: () => _stopMovement(),
-                  child: const Text('Parar'),
-                ),
-                const SizedBox(width: 20),
-                GestureDetector(
-                  onTapDown: (_) => _startMovement(BleController.moveRight),
-                  onTapUp: (_) => _stopMovement(),
-                  onTapCancel: () => _stopMovement(),
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    child: const Text('→'),
-                  ),
-                ),
-              ],
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                GestureDetector(
-                  onTapDown: (_) => _startMovement(BleController.moveBack),
-                  onTapUp: (_) => _stopMovement(),
-                  onTapCancel: () => _stopMovement(),
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    child: const Text('↓'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _toggleRecording,
-              child: Obx(() => Text(_isRecording.value
-                  ? 'Detener Grabación'
-                  : 'Iniciar Grabación')),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _startAutomaticMode,
-              child: const Text('Modo Automático'),
-            ),
-            const SizedBox(height: 20),
-            // Visualización del recorrido
-            const Text(
-              'Recorrido',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            Container(
-              margin: const EdgeInsets.symmetric(vertical: 10),
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.black),
-                color: Colors.grey[200],
-              ),
-              child: CustomPaint(
-                painter: TrayectoriaPainter(recorridoPoints),
-                size: Size.infinite,
-              ),
-            ),
+          children: [
+            _buildCompactMapaRecorrido(context),
+            const SizedBox(height: 12),
+            _buildCompactControlManual(context),
+          ],
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      floatingActionButton: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _buildCompactStopButton(),
+            _buildCompactResetButton(),
           ],
         ),
       ),
     );
   }
+
+  /// Construye el contenedor del mapa de recorrido
+  Widget _buildCompactMapaRecorrido(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+
+    return Container(
+      width: screenSize.width * 0.90,
+      height: screenSize.height * 0.40,
+      decoration: BoxDecoration(
+        border: Border.all(color: Color.fromRGBO(0, 0, 0, 0.3)),
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: CustomPaint(
+        painter: TrayectoriaPainter(recorridoPoints),
+      ),
+    );
+  }
+
+  /// Construye la sección de controles manuales
+  Widget _buildCompactControlManual(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final buttonSize = screenSize.width * 0.18;
+
+    return Column(
+      children: [
+        _buildCompactActionButtons(context),
+        const SizedBox(height: 16),
+        Column(
+          children: [
+            _buildDirectionButton(
+              icon: Icons.arrow_upward,
+              command: BleController.moveForward,
+              size: buttonSize,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildDirectionButton(
+                  icon: Icons.arrow_back,
+                  command: BleController.moveLeft,
+                  size: buttonSize,
+                ),
+                SizedBox(width: screenSize.width * 0.2),
+                _buildDirectionButton(
+                  icon: Icons.arrow_forward,
+                  command: BleController.moveRight,
+                  size: buttonSize,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _buildDirectionButton(
+              icon: Icons.arrow_downward,
+              command: BleController.moveBack,
+              size: buttonSize,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Construye los botones de acción principales
+  Widget _buildCompactActionButtons(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _buildCompactActionButton(
+          text: 'Grabar',
+          icon: FontAwesomeIcons.circle,
+          onPressed: _toggleRecording,
+          isActive: _isRecording.value,
+        ),
+        const SizedBox(width: 12),
+        _buildCompactActionButton(
+          text: 'Auto',
+          icon: FontAwesomeIcons.robot,
+          onPressed: _startAutomaticMode,
+        ),
+      ],
+    );
+  }
+
+  /// Plantilla para botones de acción compactos
+  Widget _buildCompactActionButton({
+    required String text,
+    required IconData icon,
+    required Function() onPressed,
+    bool isActive = false,
+  }) {
+    return SizedBox(
+      width: 100,
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isActive ? Colors.red : Colors.blue,
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        ),
+        icon: FaIcon(icon, size: 18, color: Colors.white),
+        label: Text(
+          text,
+          style: const TextStyle(fontSize: 14, color: Colors.white),
+        ),
+      ),
+    );
+  }
+
+  /// Construye botones direccionales circulares
+  Widget _buildDirectionButton({
+    required IconData icon,
+    required String command,
+    required double size,
+  }) {
+    return GestureDetector(
+      onTapDown: (_) => _startMovement(command),
+      onTapUp: (_) => _stopMovement(),
+      onTapCancel: () => _stopMovement(),
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: Colors.blue,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Color.fromRGBO(0, 0, 0, 0.2),
+              spreadRadius: 1,
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Icon(icon, color: Colors.white, size: size * 0.4),
+      ),
+    );
+  }
+
+  /// Botón de detención de emergencia
+  Widget _buildCompactStopButton() {
+    return FloatingActionButton(
+      heroTag: 'stop',
+      mini: true,
+      backgroundColor: Colors.red,
+      onPressed: _stopMovement,
+      child: const FaIcon(FontAwesomeIcons.stop, size: 20, color: Colors.white),
+    );
+  }
+
+  /// Botón de reinicio del recorrido
+  Widget _buildCompactResetButton() {
+    return FloatingActionButton(
+      heroTag: 'reset',
+      mini: true,
+      backgroundColor: Colors.blueAccent,
+      onPressed: _resetRecorrido,
+      child: const Icon(Icons.refresh, size: 20, color: Colors.white),
+    );
+  }
 }
 
+/// CustomPainter para dibujar el trayecto del UGV
 class TrayectoriaPainter extends CustomPainter {
   final List<Offset> points;
 
@@ -259,19 +375,20 @@ class TrayectoriaPainter extends CustomPainter {
       ..strokeWidth = 3
       ..strokeCap = StrokeCap.round;
 
+    final Offset center = Offset(size.width / 2, size.height / 2);
+
     if (points.isNotEmpty) {
-      for (int i = 0; i < points.length - 1; i++) {
-        canvas.drawLine(
-          Offset(points[i].dx + 150, points[i].dy + 150),
-          Offset(points[i + 1].dx + 150, points[i + 1].dy + 150),
-          paint,
-        );
+      Offset startPoint = center;
+      // Dibuja líneas conectando todos los puntos del recorrido
+      for (int i = 0; i < points.length; i++) {
+        Offset currentPoint =
+            Offset(center.dx + points[i].dx, center.dy + points[i].dy);
+        canvas.drawLine(startPoint, currentPoint, paint);
+        startPoint = currentPoint;
       }
     }
   }
 
   @override
-  bool shouldRepaint(CustomPainter oldDelegate) {
-    return true;
-  }
+  bool shouldRepaint(CustomPainter oldDelegate) => true;
 }

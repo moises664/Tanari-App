@@ -8,7 +8,11 @@ class AcercaApp extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text('Acerca de TANARI'),
-        backgroundColor: Colors.lightGreenAccent,
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+      ),
+      body: Container(
+        color: Colors.black54,
       ),
     );
   }

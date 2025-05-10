@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:tanari_app/src/screens/menu/acerca_app.dart';
 import 'package:tanari_app/src/screens/menu/configuraciones_app.dart';
+import 'package:tanari_app/src/screens/menu/modos_operacion/modo_Monitoreo.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_acople.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_ugv.dart';
 
@@ -79,7 +80,10 @@ class HomeScreen extends StatelessWidget {
                   onTap: () {
                     // Navegar a la pantalla de Monitoreo
                     Navigator.pop(context); // Cierra el drawer
-                    // Navigator.push(context, MaterialPageRoute(builder: (context) => const MonitoreoScreen()));
+                    Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => const ModoMonitoreo()));
                   },
                 ),
                 ListTile(
