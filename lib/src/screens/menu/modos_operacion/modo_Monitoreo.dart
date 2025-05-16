@@ -31,7 +31,7 @@ class _ModoDPState extends State<ModoMonitoreo> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Modo Dipositivo Portátil',
+          'Modo Tanari DP',
           style: theme.textTheme.titleLarge?.copyWith(
             color: Colors.white,
             fontWeight: FontWeight.bold,

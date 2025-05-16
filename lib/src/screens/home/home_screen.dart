@@ -76,7 +76,7 @@ class HomeScreen extends StatelessWidget {
               title: const Text('Modos de Operacion'),
               children: <Widget>[
                 ListTile(
-                  title: const Text('Monitoreo del Dispositivo Portatil'),
+                  title: const Text('Tanari DP'),
                   onTap: () {
                     // Navegar a la pantalla de Monitoreo
                     Navigator.pop(context); // Cierra el drawer
@@ -87,7 +87,7 @@ class HomeScreen extends StatelessWidget {
                   },
                 ),
                 ListTile(
-                  title: const Text('Control UGV'),
+                  title: const Text('Tanari UGV'),
                   onTap: () {
                     // Navegar a la pantalla de Control UGV
                     Navigator.pop(context); // Cierra el drawer

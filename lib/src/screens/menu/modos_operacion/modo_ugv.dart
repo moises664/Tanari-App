@@ -170,7 +170,7 @@ class _ModoUgvState extends State<ModoUgv> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Modo UGV'),
+        title: const Text('Modo Tanari UGV'),
         backgroundColor: Colors.black,
         foregroundColor: Colors.blueAccent,
       ),
