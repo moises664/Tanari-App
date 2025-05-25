@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:tanari_app/src/core/app_colors.dart'; // Asegúrate de que esta ruta sea correcta
+import 'package:shared_preferences/shared_preferences.dart'; // Importar Shared Preferences
 
-/// Pantalla principal para el monitoreo ambiental que muestra valores de sensores
-/// en tarjetas con diseño consistente y colores personalizados.
+/// Pantalla principal para el monitoreo de datos ambientales (Modo DP)
+/// Muestra valores de sensores en tarjetas con diseño consistente y persistencia de datos.
 class ModoMonitoreo extends StatefulWidget {
   const ModoMonitoreo({super.key});
 
@@ -9,19 +11,93 @@ class ModoMonitoreo extends StatefulWidget {
   State<ModoMonitoreo> createState() => _ModoDPState();
 }
 
-/// Estado principal de la pantalla de monitoreo
+/// Estado que gestiona la lógica de carga, actualización y visualización de los datos de los sensores.
 class _ModoDPState extends State<ModoMonitoreo> {
-  // Valores iniciales de los sensores
+  //----------------------------------------------------------------------------
+  // VARIABLES DE ESTADO Y CONTROL
+  //----------------------------------------------------------------------------
+
+  // Valores actuales de los sensores. Inicializados a '--' para indicar que no hay datos.
   String _co2 = '--';
   String _ch4 = '--';
   String _temperatura = '--';
   String _humedad = '--';
 
-  // Paleta de colores verde para las tarjetas
-  static const Color _verdePrincipal = Color(0xFF2E7D32);
-  static const Color _verdeSecundario = Color(0xFF43A047);
-  static const Color _verdeClaro = Color(0xFFC8E6C9);
-  static const Color _verdeOscuro = Color(0xFF1B5E20);
+  // Instancia de SharedPreferences para la persistencia de datos.
+  // Es nullable (?) porque se inicializa de forma asíncrona.
+  SharedPreferences? _prefs;
+
+  //----------------------------------------------------------------------------
+  // MÉTODOS DEL CICLO DE VIDA DEL WIDGET
+  //----------------------------------------------------------------------------
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSensorData(); // Llama a la carga de datos guardados al iniciar la pantalla
+  }
+
+  //----------------------------------------------------------------------------
+  // MÉTODOS DE LÓGICA DE NEGOCIO Y PERSISTENCIA
+  //----------------------------------------------------------------------------
+
+  /// Carga los datos de los sensores desde SharedPreferences.
+  /// Si no hay datos guardados, las variables de los sensores mantendrán su valor inicial '--'.
+  Future<void> _loadSensorData() async {
+    _prefs = await SharedPreferences
+        .getInstance(); // Obtiene la instancia de SharedPreferences
+    setState(() {
+      // Carga los valores guardados, usando '--' como fallback si no existen.
+      // El operador '!' se usa porque, después del 'await', _prefs ya no será nulo.
+      _co2 = _prefs!.getString('co2') ?? '--';
+      _ch4 = _prefs!.getString('ch4') ?? '--';
+      _temperatura = _prefs!.getString('temperatura') ?? '--';
+      _humedad = _prefs!.getString('humedad') ?? '--';
+    });
+  }
+
+  /// Guarda los valores actuales de los sensores en SharedPreferences.
+  /// Solo guarda si la instancia de SharedPreferences ya está inicializada.
+  Future<void> _saveSensorData() async {
+    if (_prefs != null) {
+      // Guarda cada valor de sensor como String.
+      await _prefs!.setString('co2', _co2);
+      await _prefs!.setString('ch4', _ch4);
+      await _prefs!.setString('temperatura', _temperatura);
+      await _prefs!.setString('humedad', _humedad);
+    } else {
+      // Advertencia en la consola si se intenta guardar antes de la inicialización.
+      debugPrint(
+          "Advertencia: SharedPreferences no inicializado aún. No se pueden guardar datos.");
+    }
+  }
+
+  /// Simula la actualización de los valores de los sensores y los guarda.
+  void _actualizarDatos() {
+    setState(() {
+      // Asigna nuevos valores simulados a las variables de estado.
+      _co2 = '450';
+      _ch4 = '1.2';
+      _temperatura = '25.5';
+      _humedad = '65';
+    });
+
+    _saveSensorData(); // Llama al método para guardar los datos actualizados.
+
+    // Muestra un SnackBar para notificar al usuario que los datos se han actualizado.
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Datos actualizados y guardados.'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
+  //----------------------------------------------------------------------------
+  // SECCIÓN DE INTERFAZ DE USUARIO
+  //----------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -29,66 +105,66 @@ class _ModoDPState extends State<ModoMonitoreo> {
     final screenSize = MediaQuery.of(context).size;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Modo Tanari DP',
-          style: theme.textTheme.titleLarge?.copyWith(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(
-          color: Colors.lightGreenAccent,
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _actualizarDatos,
-            tooltip: 'Actualizar datos',
-            color: Colors.blueAccent,
-          ),
-        ],
-      ),
+      // El AppBar ha sido removido intencionalmente para usar un título personalizado.
       body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
+        physics:
+            const BouncingScrollPhysics(), // Permite un efecto de rebote al hacer scroll
         child: Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: screenSize.width * 0.05,
-            vertical: 20,
+            horizontal:
+                screenSize.width * 0.05, // Padding horizontal adaptativo
+            vertical: 20, // Padding vertical
           ),
-          child: _buildMainPanel(theme, screenSize),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Título de la pantalla centrado en un contenedor con el color primario
+              _buildTitleContainer(theme),
+              const SizedBox(
+                  height: 20), // Espacio entre el título y el encabezado
+              // Encabezado secundario de la pantalla
+              _buildHeader(theme),
+              const SizedBox(
+                  height:
+                      20), // Espacio entre el encabezado y la lista de sensores
+              // Lista de tarjetas de sensores
+              _buildSensorList(),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  /// Construye el panel principal con tarjetas de sensores
-  Widget _buildMainPanel(ThemeData theme, Size screenSize) {
+  /// Construye el contenedor del título principal de la pantalla.
+  Widget _buildTitleContainer(ThemeData theme) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.symmetric(
+          horizontal: 16), // Margen para el contenedor
+      height: 60, // Altura fija para el contenedor del título
+      width: double.infinity, // Ancho completo disponible
+      alignment: Alignment.center, // Centra el contenido dentro del contenedor
       decoration: BoxDecoration(
-        color: _verdeClaro.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: _verdePrincipal.withOpacity(0.2)),
+        color: AppColors.primary, // Color de fondo del contenedor del título
+        borderRadius: BorderRadius.circular(20), // Bordes redondeados
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildHeader(theme),
-          const SizedBox(height: 20),
-          _buildSensorGrid(screenSize),
-        ],
+      child: Text(
+        'Modo DP', // Texto del título
+        style: theme.textTheme.headlineSmall?.copyWith(
+          color: AppColors.backgroundWhite, // Color del texto del título
+          fontWeight: FontWeight.bold,
+        ),
+        textAlign: TextAlign.center,
       ),
     );
   }
 
-  /// Construye el encabezado del panel
+  /// Construye el encabezado (subtítulo) de la sección de monitoreo.
   Widget _buildHeader(ThemeData theme) {
     return Text(
       'Monitoreo Ambiental',
       style: theme.textTheme.headlineSmall?.copyWith(
-        color: Colors.lightGreen,
+        color: AppColors.backgroundBlack,
         fontWeight: FontWeight.bold,
         letterSpacing: 1.1,
       ),
@@ -96,85 +172,114 @@ class _ModoDPState extends State<ModoMonitoreo> {
     );
   }
 
-  /// Construye el grid de tarjetas de sensores
-  Widget _buildSensorGrid(Size screenSize) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth > 600 ? 2 : 1;
-        final childAspectRatio = crossAxisCount == 2 ? 1.8 : 3.5;
+  /// Construye la lista de tarjetas de sensores, cada una envuelta en un contenedor con color primario.
+  Widget _buildSensorList() {
+    return Column(
+      children: [
+        _buildSensorCardContainer(
+          _SensorCard(
+            label: 'CO2',
+            value: _co2,
+            unit: 'ppm',
+            icon: Icons.cloud,
+            cardColor: Colors.green,
+            iconColor: Colors.grey.shade700,
+          ),
+        ),
+        const SizedBox(
+            height: 15), // Espacio entre los contenedores de las tarjetas
 
-        return GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: crossAxisCount,
-          childAspectRatio: childAspectRatio,
-          mainAxisSpacing: 15,
-          crossAxisSpacing: 15,
-          children: [
-            _SensorCard(
-              label: 'CO2',
-              value: _co2,
-              unit: 'ppm',
-              icon: Icons.cloud,
-              cardColor: Colors.green,
-              iconColor: Colors.grey.shade700,
+        _buildSensorCardContainer(
+          _SensorCard(
+            label: 'CH4',
+            value: _ch4,
+            unit: 'ppm',
+            icon: Icons.local_fire_department,
+            cardColor: Colors.green,
+            iconColor: Colors.red.shade700,
+          ),
+        ),
+        const SizedBox(height: 15),
+
+        _buildSensorCardContainer(
+          _SensorCard(
+            label: 'Temperatura',
+            value: _temperatura,
+            unit: 'ºC',
+            icon: Icons.thermostat,
+            cardColor: Colors.green,
+            iconColor: Colors.orange.shade800,
+          ),
+        ),
+        const SizedBox(height: 15),
+
+        _buildSensorCardContainer(
+          _SensorCard(
+            label: 'Humedad',
+            value: _humedad,
+            unit: '%',
+            icon: Icons.water_drop,
+            cardColor: Colors.green,
+            iconColor: Colors.blue.shade700,
+          ),
+        ),
+        const SizedBox(height: 25), // Más espacio antes del botón
+
+        // Botón para actualizar los datos de los sensores.
+        ElevatedButton.icon(
+          onPressed: _actualizarDatos,
+          icon: const Icon(Icons.refresh, color: AppColors.primary),
+          label: Text(
+            'Actualizar Datos',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor:
+                AppColors.backgroundBlack, // Fondo oscuro para contraste
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
             ),
-            _SensorCard(
-              label: 'CH4',
-              value: _ch4,
-              unit: 'ppm',
-              icon: Icons.local_fire_department,
-              cardColor: Colors.green,
-              iconColor: Colors.red.shade700,
-            ),
-            _SensorCard(
-              label: 'Temperatura',
-              value: _temperatura,
-              unit: 'ºC',
-              icon: Icons.thermostat,
-              cardColor: Colors.green,
-              iconColor: Colors.orange.shade800,
-            ),
-            _SensorCard(
-              label: 'Humedad',
-              value: _humedad,
-              unit: '%',
-              icon: Icons.water_drop,
-              cardColor: Colors.green,
-              iconColor: Colors.blue.shade700,
-            ),
-          ],
-        );
-      },
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          ),
+        ),
+      ],
     );
   }
 
-  /// Actualiza los valores de los sensores (simulación)
-  void _actualizarDatos() {
-    setState(() {
-      _co2 = '450';
-      _ch4 = '1.2';
-      _temperatura = '25.5';
-      _humedad = '65';
-    });
+  /// Envolver una _SensorCard en un Container con estilo para resaltarla.
+  Widget _buildSensorCardContainer(Widget sensorCard) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.primary, // Color de fondo del contenedor externo
+        borderRadius:
+            BorderRadius.circular(15), // Bordes redondeados del contenedor
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(51), // Sombra para dar profundidad
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(
+          5), // Pequeño padding interno para que se vea el borde primario
+      child: sensorCard, // La _SensorCard se coloca dentro de este contenedor
+    );
   }
 }
 
-/// Tarjeta personalizada para mostrar valores de sensores
-///
-/// [label]: Nombre del sensor
-/// [value]: Valor actual del sensor
-/// [unit]: Unidad de medida
-/// [icon]: Icono a mostrar
-/// [cardColor]: Color base de la tarjeta (de la paleta verde)
-/// [iconColor]: Color personalizado para el ícono
+/// Widget de tarjeta individual para mostrar el valor de un sensor.
 class _SensorCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final String unit;
-  final IconData icon;
-  final Color cardColor;
-  final Color iconColor;
+  final String label; // Etiqueta del sensor (ej. 'CO2')
+  final String value; // Valor del sensor (ej. '450')
+  final String unit; // Unidad de medida (ej. 'ppm')
+  final IconData icon; // Icono representativo del sensor
+  final Color
+      cardColor; // Color principal para el texto y elementos de la tarjeta
+  final Color iconColor; // Color específico para el icono
 
   const _SensorCard({
     required this.label,
@@ -190,65 +295,71 @@ class _SensorCard extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Container(
+      // Contenedor interno de la tarjeta, con su propio estilo y color de fondo.
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: cardColor.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: cardColor.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
+        color: AppColors.backgroundWhite, // Fondo blanco de la tarjeta interna
+        borderRadius:
+            BorderRadius.circular(10), // Bordes ligeramente redondeados
       ),
-      padding: const EdgeInsets.all(15),
       child: Row(
         children: [
-          // Contenedor del ícono
+          // Contenedor circular para el icono del sensor.
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: cardColor.withOpacity(0.2),
+              color: Color.alphaBlend(cardColor.withAlpha(51),
+                  Colors.white), // Color semitransparente basado en cardColor
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: iconColor, size: 28),
+            child: Icon(
+              icon,
+              color: iconColor, // Color del icono
+              size: 32,
+            ),
           ),
-          const SizedBox(width: 15),
-          // Contenido textual
+          const SizedBox(width: 15), // Espacio entre el icono y el texto
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Etiqueta del sensor
+                // Etiqueta del sensor en mayúsculas.
                 Text(
                   label.toUpperCase(),
-                  style: theme.textTheme.bodyMedium?.copyWith(
+                  style: theme.textTheme.titleMedium?.copyWith(
                     color: cardColor,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.8,
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
-                const SizedBox(height: 5),
-                // Valor y unidad
+                const SizedBox(
+                    height: 6), // Espacio entre la etiqueta y el valor
+                // Valor del sensor con su unidad.
                 RichText(
                   text: TextSpan(
-                    text: value,
+                    text: value, // El valor numérico
                     style: theme.textTheme.headlineSmall?.copyWith(
                       color: cardColor,
                       fontWeight: FontWeight.bold,
-                      fontSize: 24,
+                      fontSize: 30,
                     ),
                     children: [
                       TextSpan(
-                        text: ' $unit',
+                        text: ' $unit', // La unidad de medida
                         style: theme.textTheme.bodyLarge?.copyWith(
-                          color: cardColor.withOpacity(0.8),
+                          color: Color.alphaBlend(
+                              cardColor.withAlpha(204), Colors.white),
                           fontWeight: FontWeight.w500,
+                          fontSize: 20,
                         ),
                       ),
                     ],
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ],
             ),

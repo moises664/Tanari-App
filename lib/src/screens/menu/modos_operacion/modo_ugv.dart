@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:tanari_app/src/controllers/bluetooth/ble.controller.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:tanari_app/src/core/app_colors.dart';
 
 /// Pantalla principal para el control manual y automático del UGV
 class ModoUgv extends StatefulWidget {
@@ -166,24 +167,47 @@ class _ModoUgvState extends State<ModoUgv> {
 
   @override
   Widget build(BuildContext context) {
-    //final screenSize = MediaQuery.of(context).size;
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Modo Tanari UGV'),
-        backgroundColor: Colors.black,
-        foregroundColor: Colors.blueAccent,
-      ),
       body: Container(
         decoration: const BoxDecoration(color: Colors.white),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _buildCompactMapaRecorrido(context),
+            // Título de la pantalla (reemplaza el título del AppBar)
+            Container(
+              margin: const EdgeInsets.only(right: 16, bottom: 10, left: 16),
+              height: 60,
+              width: double.infinity,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.blue,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.only(
+                    top: 20.0,
+                    bottom: 16.0), // Ajusta el padding según necesites
+                child: Text(
+                  'Modo UGV',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        color: AppColors
+                            .backgroundPrimary, // Color del texto del título
+                        fontWeight: FontWeight.bold,
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 3,
+              child: _buildCompactMapaRecorrido(context),
+            ),
             const SizedBox(height: 12),
-            _buildCompactControlManual(context),
+            Expanded(
+              flex: 4,
+              child: _buildCompactControlManual(context),
+            ),
           ],
         ),
       ),
@@ -191,9 +215,10 @@ class _ModoUgvState extends State<ModoUgv> {
       floatingActionButton: Container(
         margin: const EdgeInsets.only(bottom: 16),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _buildCompactStopButton(),
+            const SizedBox(width: 250),
             _buildCompactResetButton(),
           ],
         ),
@@ -204,12 +229,10 @@ class _ModoUgvState extends State<ModoUgv> {
   /// Construye el contenedor del mapa de recorrido
   Widget _buildCompactMapaRecorrido(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
-
     return Container(
       width: screenSize.width * 0.90,
-      height: screenSize.height * 0.40,
       decoration: BoxDecoration(
-        border: Border.all(color: Color.fromRGBO(0, 0, 0, 0.3)),
+        border: Border.all(color: const Color.fromRGBO(0, 0, 0, 0.3)),
         color: Colors.grey[200],
         borderRadius: BorderRadius.circular(8),
       ),
@@ -221,46 +244,52 @@ class _ModoUgvState extends State<ModoUgv> {
 
   /// Construye la sección de controles manuales
   Widget _buildCompactControlManual(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final buttonSize = screenSize.width * 0.18;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double buttonSize =
+            constraints.maxWidth * 0.22; // Ajusta el tamaño del botón
 
-    return Column(
-      children: [
-        _buildCompactActionButtons(context),
-        const SizedBox(height: 16),
-        Column(
+        return Column(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _buildDirectionButton(
-              icon: Icons.arrow_upward,
-              command: BleController.moveForward,
-              size: buttonSize,
-            ),
-            const SizedBox(height: 8),
-            Row(
+            _buildCompactActionButtons(context),
+            const SizedBox(height: 12),
+            Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 _buildDirectionButton(
-                  icon: Icons.arrow_back,
-                  command: BleController.moveLeft,
+                  icon: Icons.arrow_upward,
+                  command: BleController.moveForward,
                   size: buttonSize,
                 ),
-                SizedBox(width: screenSize.width * 0.2),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildDirectionButton(
+                      icon: Icons.arrow_back,
+                      command: BleController.moveLeft,
+                      size: buttonSize,
+                    ),
+                    SizedBox(width: constraints.maxWidth * 0.2),
+                    _buildDirectionButton(
+                      icon: Icons.arrow_forward,
+                      command: BleController.moveRight,
+                      size: buttonSize,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
                 _buildDirectionButton(
-                  icon: Icons.arrow_forward,
-                  command: BleController.moveRight,
+                  icon: Icons.arrow_downward,
+                  command: BleController.moveBack,
                   size: buttonSize,
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            _buildDirectionButton(
-              icon: Icons.arrow_downward,
-              command: BleController.moveBack,
-              size: buttonSize,
-            ),
           ],
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -298,12 +327,13 @@ class _ModoUgvState extends State<ModoUgv> {
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: isActive ? Colors.red : Colors.blue,
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
-        icon: FaIcon(icon, size: 18, color: Colors.white),
+        icon: FaIcon(icon, size: 16, color: Colors.white),
         label: Text(
           text,
-          style: const TextStyle(fontSize: 14, color: Colors.white),
+          style: const TextStyle(fontSize: 13, color: Colors.white),
         ),
       ),
     );
@@ -327,14 +357,14 @@ class _ModoUgvState extends State<ModoUgv> {
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: Color.fromRGBO(0, 0, 0, 0.2),
+              color: const Color.fromRGBO(0, 0, 0, 0.2),
               spreadRadius: 1,
               blurRadius: 8,
               offset: const Offset(0, 4),
             ),
           ],
         ),
-        child: Icon(icon, color: Colors.white, size: size * 0.4),
+        child: Icon(icon, color: Colors.white, size: size * 0.5),
       ),
     );
   }
@@ -343,10 +373,10 @@ class _ModoUgvState extends State<ModoUgv> {
   Widget _buildCompactStopButton() {
     return FloatingActionButton(
       heroTag: 'stop',
-      mini: true,
+      mini: false,
       backgroundColor: Colors.red,
       onPressed: _stopMovement,
-      child: const FaIcon(FontAwesomeIcons.stop, size: 20, color: Colors.white),
+      child: const FaIcon(FontAwesomeIcons.stop, size: 24, color: Colors.white),
     );
   }
 
@@ -354,10 +384,10 @@ class _ModoUgvState extends State<ModoUgv> {
   Widget _buildCompactResetButton() {
     return FloatingActionButton(
       heroTag: 'reset',
-      mini: true,
+      mini: false,
       backgroundColor: Colors.blueAccent,
       onPressed: _resetRecorrido,
-      child: const Icon(Icons.refresh, size: 20, color: Colors.white),
+      child: const Icon(Icons.refresh, size: 24, color: Colors.white),
     );
   }
 }
