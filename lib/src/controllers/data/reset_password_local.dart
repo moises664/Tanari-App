@@ -121,10 +121,12 @@ class _ResetPasswordLocalDBState extends State<ResetPasswordLocalDB> {
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   validator: (value) {
-                    if (value == null || value.isEmpty)
+                    if (value == null || value.isEmpty) {
                       return 'Campo obligatorio';
-                    if (!GetUtils.isEmail(value))
+                    }
+                    if (!GetUtils.isEmail(value)) {
                       return 'Ingresa un correo válido';
+                    }
                     return null;
                   },
                   decoration: InputDecoration(
@@ -143,10 +145,12 @@ class _ResetPasswordLocalDBState extends State<ResetPasswordLocalDB> {
                   obscureText: true,
                   obscuringCharacter: '*',
                   validator: (value) {
-                    if (value == null || value.isEmpty)
+                    if (value == null || value.isEmpty) {
                       return 'Campo obligatorio';
-                    if (value.length < 6)
+                    }
+                    if (value.length < 6) {
                       return 'La contraseña debe tener al menos 6 caracteres';
+                    }
                     return null;
                   },
                   decoration: InputDecoration(
@@ -165,8 +169,9 @@ class _ResetPasswordLocalDBState extends State<ResetPasswordLocalDB> {
                   obscureText: true,
                   obscuringCharacter: '*',
                   validator: (value) {
-                    if (value == null || value.isEmpty)
+                    if (value == null || value.isEmpty) {
                       return 'Campo obligatorio';
+                    }
                     if (value != _newPasswordController.text) {
                       return 'Las contraseñas no coinciden';
                     }

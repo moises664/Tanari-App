@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:tanari_app/src/core/app_colors.dart'; // Asegúrate de que esta ruta sea correcta
-import 'package:shared_preferences/shared_preferences.dart'; // Importar Shared Preferences
+import 'package:tanari_app/src/controllers/bluetooth/ble.controller.dart';
+import 'package:tanari_app/src/core/app_colors.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:get/get.dart'; // Importar GetX
 
 /// Pantalla principal para el monitoreo de datos ambientales (Modo DP)
 /// Muestra valores de sensores en tarjetas con diseño consistente y persistencia de datos.
@@ -17,14 +19,10 @@ class _ModoDPState extends State<ModoMonitoreo> {
   // VARIABLES DE ESTADO Y CONTROL
   //----------------------------------------------------------------------------
 
-  // Valores actuales de los sensores. Inicializados a '--' para indicar que no hay datos.
-  String _co2 = '--';
-  String _ch4 = '--';
-  String _temperatura = '--';
-  String _humedad = '--';
+  // Inyectar el BleController
+  final BleController _bleController = Get.find<BleController>();
 
   // Instancia de SharedPreferences para la persistencia de datos.
-  // Es nullable (?) porque se inicializa de forma asíncrona.
   SharedPreferences? _prefs;
 
   //----------------------------------------------------------------------------
@@ -34,21 +32,38 @@ class _ModoDPState extends State<ModoMonitoreo> {
   @override
   void initState() {
     super.initState();
-    _loadSensorData(); // Llama a la carga de datos guardados al iniciar la pantalla
+    _loadSensorData(); // Carga los datos guardados al iniciar la pantalla
+
+    // Observar los cambios en portableData del BleController
+    _bleController.portableData.listen((data) {
+      if (mounted) {
+        // Asegúrate de que el widget aún esté montado
+        setState(() {
+          // Asigna los datos recibidos del BleController a las variables locales
+          _co2 = data['co2'] ?? '--';
+          _ch4 = data['ch4'] ?? '--';
+          _temperatura = data['temperature'] ?? '--';
+          _humedad = data['humidity'] ?? '--';
+        });
+        _saveSensorData(); // Guarda los nuevos datos automáticamente
+      }
+    });
   }
 
+  // Las variables de sensor ahora son locales y se actualizan desde portableData
+  String _co2 = '--';
+  String _ch4 = '--';
+  String _temperatura = '--';
+  String _humedad = '--';
+
   //----------------------------------------------------------------------------
-  // MÉTODOS DE LÓGICA DE NEGOCIO Y PERSISTENCIA
+  // MÉTODOS DE LÓGICA DE NEGOCIO Y PERSISTENCIA (Existentes)
   //----------------------------------------------------------------------------
 
   /// Carga los datos de los sensores desde SharedPreferences.
-  /// Si no hay datos guardados, las variables de los sensores mantendrán su valor inicial '--'.
   Future<void> _loadSensorData() async {
-    _prefs = await SharedPreferences
-        .getInstance(); // Obtiene la instancia de SharedPreferences
+    _prefs = await SharedPreferences.getInstance();
     setState(() {
-      // Carga los valores guardados, usando '--' como fallback si no existen.
-      // El operador '!' se usa porque, después del 'await', _prefs ya no será nulo.
       _co2 = _prefs!.getString('co2') ?? '--';
       _ch4 = _prefs!.getString('ch4') ?? '--';
       _temperatura = _prefs!.getString('temperatura') ?? '--';
@@ -57,43 +72,19 @@ class _ModoDPState extends State<ModoMonitoreo> {
   }
 
   /// Guarda los valores actuales de los sensores en SharedPreferences.
-  /// Solo guarda si la instancia de SharedPreferences ya está inicializada.
   Future<void> _saveSensorData() async {
     if (_prefs != null) {
-      // Guarda cada valor de sensor como String.
       await _prefs!.setString('co2', _co2);
       await _prefs!.setString('ch4', _ch4);
       await _prefs!.setString('temperatura', _temperatura);
       await _prefs!.setString('humedad', _humedad);
     } else {
-      // Advertencia en la consola si se intenta guardar antes de la inicialización.
       debugPrint(
           "Advertencia: SharedPreferences no inicializado aún. No se pueden guardar datos.");
     }
   }
 
-  /// Simula la actualización de los valores de los sensores y los guarda.
-  void _actualizarDatos() {
-    setState(() {
-      // Asigna nuevos valores simulados a las variables de estado.
-      _co2 = '450';
-      _ch4 = '1.2';
-      _temperatura = '25.5';
-      _humedad = '65';
-    });
-
-    _saveSensorData(); // Llama al método para guardar los datos actualizados.
-
-    // Muestra un SnackBar para notificar al usuario que los datos se han actualizado.
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Datos actualizados y guardados.'),
-          duration: Duration(seconds: 1),
-        ),
-      );
-    }
-  }
+  // Ya no se necesita _actualizarDatos() porque la data viene del BLE
 
   //----------------------------------------------------------------------------
   // SECCIÓN DE INTERFAZ DE USUARIO
@@ -105,30 +96,93 @@ class _ModoDPState extends State<ModoMonitoreo> {
     final screenSize = MediaQuery.of(context).size;
 
     return Scaffold(
-      // El AppBar ha sido removido intencionalmente para usar un título personalizado.
       body: SingleChildScrollView(
-        physics:
-            const BouncingScrollPhysics(), // Permite un efecto de rebote al hacer scroll
+        physics: const BouncingScrollPhysics(),
         child: Padding(
           padding: EdgeInsets.symmetric(
-            horizontal:
-                screenSize.width * 0.05, // Padding horizontal adaptativo
-            vertical: 20, // Padding vertical
+            horizontal: screenSize.width * 0.05,
+            vertical: 20,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Título de la pantalla centrado en un contenedor con el color primario
               _buildTitleContainer(theme),
-              const SizedBox(
-                  height: 20), // Espacio entre el título y el encabezado
-              // Encabezado secundario de la pantalla
+              const SizedBox(height: 20),
               _buildHeader(theme),
-              const SizedBox(
-                  height:
-                      20), // Espacio entre el encabezado y la lista de sensores
-              // Lista de tarjetas de sensores
+              const SizedBox(height: 20),
+              // Nuevo: Indicador de estado de conexión del Tanari DP
+              Obx(() => _buildConnectionStatus(
+                  theme,
+                  _bleController.isPortableConnected.value,
+                  BleController.deviceNameDP)),
+              const SizedBox(height: 20),
               _buildSensorList(),
+              const SizedBox(height: 25),
+              // Botones de control BLE para el Tanari DP
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  Expanded(
+                    child: Obx(
+                      () => ElevatedButton.icon(
+                        onPressed: _bleController.isScanning.value
+                            ? null
+                            : () => _bleController.startScan(),
+                        icon: _bleController.isScanning.value
+                            ? const CircularProgressIndicator(
+                                color: AppColors.primary, strokeWidth: 2)
+                            : const Icon(Icons.bluetooth_searching,
+                                color: AppColors.primary),
+                        label: Text(
+                          _bleController.isScanning.value
+                              ? 'Escaneando...'
+                              : 'Escanear BLE',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.backgroundBlack,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Obx(
+                      () => ElevatedButton.icon(
+                        onPressed: _bleController.isPortableConnected.value
+                            ? () => _bleController.disconnectDevice(
+                                _bleController.portableDeviceId!)
+                            : null, // Solo habilitar si conectado
+                        icon: const Icon(Icons.bluetooth_disabled,
+                            color: AppColors.primary),
+                        label: Text(
+                          'Desconectar DP', // Texto específico para el DP
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.backgroundBlack,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -139,19 +193,18 @@ class _ModoDPState extends State<ModoMonitoreo> {
   /// Construye el contenedor del título principal de la pantalla.
   Widget _buildTitleContainer(ThemeData theme) {
     return Container(
-      margin: const EdgeInsets.symmetric(
-          horizontal: 16), // Margen para el contenedor
-      height: 60, // Altura fija para el contenedor del título
-      width: double.infinity, // Ancho completo disponible
-      alignment: Alignment.center, // Centra el contenido dentro del contenedor
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      height: 60,
+      width: double.infinity,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: AppColors.primary, // Color de fondo del contenedor del título
-        borderRadius: BorderRadius.circular(20), // Bordes redondeados
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        'Modo DP', // Texto del título
+        'Modo DP',
         style: theme.textTheme.headlineSmall?.copyWith(
-          color: AppColors.backgroundWhite, // Color del texto del título
+          color: AppColors.backgroundWhite,
           fontWeight: FontWeight.bold,
         ),
         textAlign: TextAlign.center,
@@ -172,7 +225,7 @@ class _ModoDPState extends State<ModoMonitoreo> {
     );
   }
 
-  /// Construye la lista de tarjetas de sensores, cada una envuelta en un contenedor con color primario.
+  /// Construye la lista de tarjetas de sensores.
   Widget _buildSensorList() {
     return Column(
       children: [
@@ -186,9 +239,7 @@ class _ModoDPState extends State<ModoMonitoreo> {
             iconColor: Colors.grey.shade700,
           ),
         ),
-        const SizedBox(
-            height: 15), // Espacio entre los contenedores de las tarjetas
-
+        const SizedBox(height: 15),
         _buildSensorCardContainer(
           _SensorCard(
             label: 'CH4',
@@ -200,7 +251,6 @@ class _ModoDPState extends State<ModoMonitoreo> {
           ),
         ),
         const SizedBox(height: 15),
-
         _buildSensorCardContainer(
           _SensorCard(
             label: 'Temperatura',
@@ -212,7 +262,6 @@ class _ModoDPState extends State<ModoMonitoreo> {
           ),
         ),
         const SizedBox(height: 15),
-
         _buildSensorCardContainer(
           _SensorCard(
             label: 'Humedad',
@@ -223,28 +272,6 @@ class _ModoDPState extends State<ModoMonitoreo> {
             iconColor: Colors.blue.shade700,
           ),
         ),
-        const SizedBox(height: 25), // Más espacio antes del botón
-
-        // Botón para actualizar los datos de los sensores.
-        ElevatedButton.icon(
-          onPressed: _actualizarDatos,
-          icon: const Icon(Icons.refresh, color: AppColors.primary),
-          label: Text(
-            'Actualizar Datos',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor:
-                AppColors.backgroundBlack, // Fondo oscuro para contraste
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          ),
-        ),
       ],
     );
   }
@@ -253,33 +280,61 @@ class _ModoDPState extends State<ModoMonitoreo> {
   Widget _buildSensorCardContainer(Widget sensorCard) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.primary, // Color de fondo del contenedor externo
-        borderRadius:
-            BorderRadius.circular(15), // Bordes redondeados del contenedor
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(15),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(51), // Sombra para dar profundidad
+            color: Colors.black.withAlpha(51),
             blurRadius: 10,
             offset: const Offset(0, 5),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(
-          5), // Pequeño padding interno para que se vea el borde primario
-      child: sensorCard, // La _SensorCard se coloca dentro de este contenedor
+      padding: const EdgeInsets.all(5),
+      child: sensorCard,
+    );
+  }
+
+  // Widget para mostrar el estado de la conexión BLE de un dispositivo específico
+  Widget _buildConnectionStatus(
+      ThemeData theme, bool isConnected, String deviceName) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isConnected ? Colors.green.shade100 : Colors.red.shade100,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            isConnected ? Icons.bluetooth_connected : Icons.bluetooth_disabled,
+            color: isConnected ? Colors.green.shade800 : Colors.red.shade800,
+          ),
+          const SizedBox(width: 10),
+          Text(
+            isConnected
+                ? '$deviceName: Conectado'
+                : '$deviceName: Desconectado',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: isConnected ? Colors.green.shade800 : Colors.red.shade800,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
 /// Widget de tarjeta individual para mostrar el valor de un sensor.
 class _SensorCard extends StatelessWidget {
-  final String label; // Etiqueta del sensor (ej. 'CO2')
-  final String value; // Valor del sensor (ej. '450')
-  final String unit; // Unidad de medida (ej. 'ppm')
-  final IconData icon; // Icono representativo del sensor
-  final Color
-      cardColor; // Color principal para el texto y elementos de la tarjeta
-  final Color iconColor; // Color específico para el icono
+  final String label;
+  final String value;
+  final String unit;
+  final IconData icon;
+  final Color cardColor;
+  final Color iconColor;
 
   const _SensorCard({
     required this.label,
@@ -295,36 +350,31 @@ class _SensorCard extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Container(
-      // Contenedor interno de la tarjeta, con su propio estilo y color de fondo.
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.backgroundWhite, // Fondo blanco de la tarjeta interna
-        borderRadius:
-            BorderRadius.circular(10), // Bordes ligeramente redondeados
+        color: AppColors.backgroundWhite,
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         children: [
-          // Contenedor circular para el icono del sensor.
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Color.alphaBlend(cardColor.withAlpha(51),
-                  Colors.white), // Color semitransparente basado en cardColor
+              color: Color.alphaBlend(cardColor.withAlpha(51), Colors.white),
               shape: BoxShape.circle,
             ),
             child: Icon(
               icon,
-              color: iconColor, // Color del icono
+              color: iconColor,
               size: 32,
             ),
           ),
-          const SizedBox(width: 15), // Espacio entre el icono y el texto
+          const SizedBox(width: 15),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Etiqueta del sensor en mayúsculas.
                 Text(
                   label.toUpperCase(),
                   style: theme.textTheme.titleMedium?.copyWith(
@@ -335,12 +385,10 @@ class _SensorCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
                 ),
-                const SizedBox(
-                    height: 6), // Espacio entre la etiqueta y el valor
-                // Valor del sensor con su unidad.
+                const SizedBox(height: 6),
                 RichText(
                   text: TextSpan(
-                    text: value, // El valor numérico
+                    text: value,
                     style: theme.textTheme.headlineSmall?.copyWith(
                       color: cardColor,
                       fontWeight: FontWeight.bold,
@@ -348,7 +396,7 @@ class _SensorCard extends StatelessWidget {
                     ),
                     children: [
                       TextSpan(
-                        text: ' $unit', // La unidad de medida
+                        text: ' $unit',
                         style: theme.textTheme.bodyLarge?.copyWith(
                           color: Color.alphaBlend(
                               cardColor.withAlpha(204), Colors.white),

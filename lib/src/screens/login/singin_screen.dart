@@ -68,6 +68,7 @@ class _SignInScreenState extends State<SignInScreen> {
         await _saveCredentials(); // Guardar preferencias
 
         // Mostrar feedback al usuario
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Autenticación exitosa'),
@@ -81,6 +82,7 @@ class _SignInScreenState extends State<SignInScreen> {
         // --- CAMBIO AQUÍ: Usar Get.offAll para reemplazar todas las rutas anteriores ---
         Get.offAll(() => const HomeScreen());
       } else {
+        // ignore: use_build_context_synchronously
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Credenciales incorrectas'),

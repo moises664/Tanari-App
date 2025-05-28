@@ -58,7 +58,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ),
         );
       }
-    } catch (e, stackTrace) {
+    } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

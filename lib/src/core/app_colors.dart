@@ -15,6 +15,12 @@ class AppColors {
   /// Color de acento para elementos destacados.
   static const Color accent = Color(0xFF040240); // Azul profundo
 
+  /// **NUEVO: Color de acento específico para estados activos o resaltados.**
+  /// Este color se utilizará para indicar un estado "activo" o "presionado"
+  /// en botones o elementos interactivos, como el modo automático.
+  static const Color accentColor =
+      Color(0xFF4CAF50); // Un verde vibrante para estados activos
+
   // *******************
   // ** Backgrounds **
   // *******************

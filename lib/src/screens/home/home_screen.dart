@@ -5,7 +5,7 @@ import 'package:tanari_app/src/core/app_colors.dart';
 import 'package:tanari_app/src/screens/home/home_tab.dart';
 import 'package:tanari_app/src/screens/login/singin_screen.dart';
 import 'package:tanari_app/src/screens/menu/acerca_app.dart';
-import 'package:tanari_app/src/screens/menu/configuraciones_app.dart';
+import 'package:tanari_app/src/screens/menu/comunicacion_ble.dart';
 import 'package:tanari_app/src/screens/menu/historial_app.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_monitoreo.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_acople.dart';
@@ -21,8 +21,10 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // 1. BottomNav: Variable para el índice seleccionado en el Bottom Navigation Bar
   int _selectedIndex = 0;
 
+  // 2. BottomNav: Lista de widgets que representan cada pestaña del Bottom Navigation Bar
   final List<Widget> _widgetOptions = <Widget>[
     const HomeTab(),
     const ModoMonitoreo(),
@@ -118,7 +120,8 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         drawer: _menuHome(context), // Menú lateral
 
-        bottomNavigationBar: _buildCustomBottomNavigationBar(context),
+        bottomNavigationBar:
+            _buildCustomBottomNavigationBar(context), // Botton Navigation Bar
 
         backgroundColor: Colors.white,
 
@@ -264,10 +267,10 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
             ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Configuración'),
+              leading: const Icon(Icons.bluetooth),
+              title: const Text('Comunicacion  BLE'),
               onTap: () {
-                Get.to(() => const ConfiguracionesApp());
+                Get.to(() => ComunicacionBleScreen());
               },
             ),
             ListTile(
