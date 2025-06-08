@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Permisos básicos -->
+    <!-- Permiso para acceder a Internet -->   
+    <uses-permission android:name="android.permission.INTERNET" />
     
-       <!-- Permisos para Bluetooth (obligatorios) -->
+    <!-- Permisos para Bluetooth (obligatorios) -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     

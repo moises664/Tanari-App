@@ -11,16 +11,19 @@ dependencies:
     sdk: flutter
   font_awesome_flutter: ^10.8.0
   cupertino_icons: ^1.0.8
-  shared_preferences: ^2.5.3
-  flutter_blue_plus: ^1.35.5 
-  permission_handler: ^12.0.0+1
-  get: ^4.7.2
-  device_info_plus: ^11.4.0
-  logger: ^2.5.0
+  shared_preferences: ^2.5.3 # Almacenamiento local de preferencias del usuario
+  http: ^1.4.0 # Para realizar peticiones HTTP
+  flutter_blue_plus: ^1.35.5 # Plugin para conectividad Bluetooth
+  permission_handler: ^12.0.0+1 # Permisos para acceder a funcionalidades del dispositivo
+  get: ^4.7.2 # Manejo de estado y dependencias
+  device_info_plus: ^11.4.0 # Informacion del dispositivo
+  logger: ^2.5.0 # Para registro de logs
   icons_plus: ^5.0.0
-  sqflite: ^2.4.2
-  path: ^1.8.3
-  logging: ^1.3.0
+  sqflite: ^2.4.2 # Base de datos local para almacenamiento de datos
+  path: ^1.8.3 # Manejo de rutas de archivos
+  logging: ^1.3.0 # Registro de eventos y errores
+  collection: ^1.19.1 # Utilidades de colecciones
+  supabase_flutter: ^2.9.0  # Supabase para autenticacion y almacenamiento de datos
 
 
 dev_dependencies:
