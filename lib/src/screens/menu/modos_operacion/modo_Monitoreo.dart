@@ -118,71 +118,7 @@ class _ModoDPState extends State<ModoMonitoreo> {
               const SizedBox(height: 20),
               _buildSensorList(),
               const SizedBox(height: 25),
-              // Botones de control BLE para el Tanari DP
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Expanded(
-                    child: Obx(
-                      () => ElevatedButton.icon(
-                        onPressed: _bleController.isScanning.value
-                            ? null
-                            : () => _bleController.startScan(),
-                        icon: _bleController.isScanning.value
-                            ? const CircularProgressIndicator(
-                                color: AppColors.primary, strokeWidth: 2)
-                            : const Icon(Icons.bluetooth_searching,
-                                color: AppColors.primary),
-                        label: Text(
-                          _bleController.isScanning.value
-                              ? 'Escaneando...'
-                              : 'Escanear BLE',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.backgroundBlack,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 12),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Obx(
-                      () => ElevatedButton.icon(
-                        onPressed: _bleController.isPortableConnected.value
-                            ? () => _bleController.disconnectDevice(
-                                _bleController.portableDeviceId!)
-                            : null, // Solo habilitar si conectado
-                        icon: const Icon(Icons.bluetooth_disabled,
-                            color: AppColors.primary),
-                        label: Text(
-                          'Desconectar DP', // Texto específico para el DP
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.backgroundBlack,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 12),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              // Se eliminan los botones de control BLE para el Tanari DP
             ],
           ),
         ),

@@ -36,14 +36,18 @@ class BleController extends GetxController {
   // COMANDOS PARA EL UGV
   // Estos comandos son strings que se envían al Tanari UGV para controlar su comportamiento.
   //----------------------------------------------------------------------------
-  static const String moveForward = 'F';
-  static const String moveBack = 'B';
-  static const String moveRight = 'R';
-  static const String moveLeft = 'L';
-  static const String stop = 'S';
-  static const String startRecording = 'G';
-  static const String stopRecording = 'N';
-  static const String startAutoMode = 'A';
+  static const String moveForward = 'F'; // Mover hacia adelante
+  static const String moveBack = 'B'; // Mover hacia atrás
+  static const String moveRight = 'R'; // Mover a la derecha
+  static const String moveLeft = 'L'; // Mover a la izquierda
+  static const String stop = 'S'; // Detener
+  static const String interruption =
+      'P'; // Comando para interrupción manual del movimiento
+  static const String endAutoMode =
+      'T'; // Comando para finalizar el modo automático
+  static const String startRecording = 'G'; // Iniciar grabación
+  static const String stopRecording = 'N'; // Detener grabación
+  static const String startAutoMode = 'A'; // Iniciar modo automático
   static const String toggleLedOn = 'H'; // Comando para encender el LED
   static const String toggleLedOff = 'L'; // Comando para apagar el LED
 
@@ -74,6 +78,9 @@ class BleController extends GetxController {
   // Estados de conexión específicos para UGV y DP para una gestión más fácil en la UI.
   final isUgvConnected = false.obs;
   final isPortableConnected = false.obs;
+
+  final RxnString receivedData = RxnString(
+      null); // RxString para los datos recibidos del UGV, puede ser nulo
 
   //----------------------------------------------------------------------------
   // SUBSCRIPCIONES Y TIMERS
@@ -311,11 +318,11 @@ class BleController extends GetxController {
       final index = foundDevices
           .indexWhere((d) => d.device.remoteId == foundDevice.device.remoteId);
       if (index != -1) {
-        // Actualiza el RSSI y el estado de conexión en foundDevices si el dispositivo ya existía
+        // Si ya existe, actualiza el RSSI y el estado de conexión en foundDevices
         foundDevices[index] = foundDevices[index].copyWith(
             rssi: await foundDevice.device.readRssi(), isConnected: true);
       } else {
-        // Si por alguna razón no estaba en foundDevices (menos común), lo añadimos
+        // Si no existe, añádelo
         foundDevices.add(FoundDevice(
             foundDevice.device, await foundDevice.device.readRssi(),
             isConnected: true));
@@ -408,21 +415,28 @@ class BleController extends GetxController {
           ledStateUGV.value = data == toggleLedOn;
         }
 
-        // Si se envía un comando de movimiento/grabación, desactiva el modo automático.
+        // --- INICIO DE CORRECCIÓN: Eliminar la desactivación automática por comandos de movimiento/grabación ---
+        // La lógica de desactivación del modo automático ahora solo se maneja en ModoUgv
+        // mediante el botón "Stop" (interruption) o el botón "Auto" mismo.
+        // Se elimina la siguiente sección comentada:
+        /*
         if ([
           moveForward,
           moveBack,
           moveRight,
           moveLeft,
           stop,
+          endAutoMode, // Finalizar modo automático
           startRecording,
           stopRecording,
         ].contains(data)) {
-          if (isAutomaticMode.value) {
+          if (isAutomaticMode.value && data != interruption) {
             isAutomaticMode.value = false;
             _logger.i("Modo automático desactivado por comando manual/grabar.");
           }
         }
+        */
+        // --- FIN DE CORRECCIÓN ---
       }
     } catch (e) {
       _logger.e("Error al enviar datos a $deviceId: $e");
@@ -452,10 +466,6 @@ class BleController extends GetxController {
               ? startRecording
               : stopRecording); // Envía el comando correspondiente.
       _logger.i("Estado de grabación cambiado a: ${isRecording.value}");
-      if (isRecording.value) {
-        isAutomaticMode.value =
-            false; // Desactiva el modo automático al iniciar grabación.
-      }
     } else {
       Get.snackbar(
           "Advertencia", "UGV no conectado o característica no disponible.");
@@ -503,8 +513,8 @@ class BleController extends GetxController {
             connectedCharacteristics[deviceId] =
                 char; // Almacena la característica conectada por su ID.
             ugvDeviceId = deviceId; // Asigna el ID del dispositivo UGV.
-            // Opcional: Si el UGV también envía notificaciones, configúralas aquí.
-            // _setupNotifications(deviceId, char);
+            _setupNotifications(
+                deviceId, char); // Configurar notificaciones para UGV
             _logger.i(
                 'Característica UGV encontrada: ${char.uuid} para $deviceName');
           }
@@ -550,10 +560,18 @@ class BleController extends GetxController {
         // Si es la característica del DP, parsea y almacena los datos.
         _parseAndStorePortableData(dataString);
         _logger.i('Datos del Tanari DP ($deviceId): $dataString');
-      } else if (characteristic.uuid.toString().toLowerCase() ==
+      }
+      // Procesar datos del UGV
+      else if (characteristic.uuid.toString().toLowerCase() ==
           characteristicUuidUGV) {
-        // Aquí puedes procesar feedback del UGV si lo implementas (e.g., estado de batería).
         _logger.d('Datos del Tanari UGV ($deviceId): $dataString');
+        receivedData.value =
+            dataString; // Actualiza el RxString con los datos del UGV
+        // Después de procesar el dato, se establece a null para permitir que el listener se dispare de nuevo
+        // cuando el mismo valor ('T') sea recibido en el futuro.
+        Future.delayed(const Duration(milliseconds: 50)).then((_) {
+          receivedData.value = null;
+        });
       }
     }, onError: (error) {
       _logger.e(
@@ -568,18 +586,27 @@ class BleController extends GetxController {
         "Notificaciones activadas para ${characteristic.uuid} en $deviceId.");
   }
 
-  /// Parsea la cadena de datos recibida del Tanari DP (formato "CO2;CH4;Temp;Hum")
-  /// y actualiza el mapa observable `portableData`.
+  // En tu BleController, dentro de _parseAndStorePortableData
   void _parseAndStorePortableData(String data) {
     try {
       final List<String> parts = data.split(';');
-      if (parts.length >= 4) {
+      // Si el formato es "CO2;CH4;Temp;Hum;Pres"
+      if (parts.length >= 5) {
+        // Cambia el 4 por 5 para incluir la presión
         portableData['co2'] = parts[0];
         portableData['ch4'] = parts[1];
         portableData['temperature'] = parts[2];
         portableData['humidity'] = parts[3];
-        portableData
-            .refresh(); // Notifica a los oyentes que los datos han cambiado.
+        //portableData['pressure'] = parts[4]; // Añade esta línea para la presión
+        portableData.refresh();
+      } else if (parts.length == 4) {
+        // Si solo se reciben 4 partes (sin presión)
+        portableData['co2'] = parts[0];
+        portableData['ch4'] = parts[1];
+        portableData['temperature'] = parts[2];
+        portableData['humidity'] = parts[3];
+        //portableData['pressure'] = '--'; // Establece presión a '--'
+        portableData.refresh();
       } else {
         _logger.w('Formato de datos del Tanari DP incorrecto: $data');
       }
@@ -612,7 +639,7 @@ class BleController extends GetxController {
         } else {
           // Si el dispositivo ya no está conectado, cancela el temporizador.
           _logger.w(
-              'Dispositivo $deviceId no está conectado, cancelando RSSI updates.');
+              'Dispositivo $deviceId no está conectado, cancelando actualizaciones de RSSI.');
           _rssiTimers[deviceId]?.cancel();
         }
       } catch (e) {
@@ -689,7 +716,6 @@ class BleController extends GetxController {
       isPortableConnected.value =
           false; // Actualiza el estado de conexión del Portable.
     }
-
     // Asegurarse de que el FoundDevice correspondiente en la lista principal se actualice
     // para reflejar que ya no está conectado. No lo removemos de foundDevices
     // para que siga apareciendo en la lista, permitiendo la reconexión.

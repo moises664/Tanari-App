@@ -3,6 +3,8 @@ import 'package:get/get.dart';
 import 'package:tanari_app/src/controllers/bluetooth/ble.controller.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:tanari_app/src/core/app_colors.dart'; // Asegúrate de que esta ruta sea correcta
+import 'package:logger/logger.dart'; // Importar la librería Logger
+import 'package:collection/collection.dart'; // Importar para firstWhereOrNull
 
 /// Pantalla principal para el control manual y automático del UGV.
 class ModoUgv extends StatefulWidget {
@@ -19,6 +21,7 @@ class _ModoUgvState extends State<ModoUgv> {
   //----------------------------------------------------------------------------
 
   final BleController bleController = Get.find<BleController>();
+  final Logger _logger = Logger(); // Instancia del logger
 
   // Puntos del recorrido para dibujar en el mapa.
   List<Offset> recorridoPoints = [const Offset(0, 0)];
@@ -37,6 +40,9 @@ class _ModoUgvState extends State<ModoUgv> {
 
   // Bandera para controlar la visibilidad del SnackBar de advertencia de conexión.
   bool _connectionSnackbarShown = false;
+
+  // NUEVA VARIABLE DE ESTADO: Controla si estamos esperando la 'T' final para reactivar los controles manuales.
+  final RxBool _awaitingFinalTForManualControlsReactivation = false.obs;
 
   //----------------------------------------------------------------------------
   // MÉTODOS DEL CICLO DE VIDA DEL WIDGET
@@ -78,6 +84,40 @@ class _ModoUgvState extends State<ModoUgv> {
         bleController.isAutomaticMode.value =
             false; // Desactivar modo automático al desconectar
         _isRecording.value = false; // Desactivar grabación al desconectar
+        _awaitingFinalTForManualControlsReactivation.value =
+            false; // Resetear también esta bandera
+      }
+    });
+
+    // --- LÓGICA MODIFICADA PARA DATOS RECIBIDOS DEL ESP32 ---
+    // Escucha los datos recibidos del ESP32 a través del BleController
+    ever(bleController.receivedData, (String? data) async {
+      // Asegura que 'data' es String?
+      if (data == BleController.endAutoMode) {
+        // Usamos endAutoMode que es 'T'
+        // Se recibió 'T' del ESP32, indicando que el modo automático ha terminado.
+        _logger.i("Received 'T' from ESP32. Automatic mode cycle ended.");
+
+        // Si el modo automático está activo en la aplicación (botón rojo),
+        // reenviar 'A' para iniciar el siguiente ciclo.
+        if (bleController.isAutomaticMode.value) {
+          _logger.i(
+              "Automatic mode is active. Sending 'A' again after a short delay.");
+          await Future.delayed(
+              const Duration(milliseconds: 100)); // Pequeño retraso
+          _sendBleCommand(BleController
+              .startAutoMode); // Re-envía 'A' para el siguiente ciclo
+        } else if (_awaitingFinalTForManualControlsReactivation.value) {
+          // Si el modo automático NO está activo Y estábamos esperando la 'T' final,
+          // entonces es el momento de reactivar los controles manuales.
+          _logger.i(
+              "Automatic mode was manually disabled and final 'T' received. Re-enabling manual controls.");
+          _awaitingFinalTForManualControlsReactivation.value =
+              false; // Reactivar controles manuales
+        } else {
+          _logger.i(
+              "Automatic mode is not active and not awaiting final 'T'. Not re-sending 'A'.");
+        }
       }
     });
   }
@@ -93,21 +133,16 @@ class _ModoUgvState extends State<ModoUgv> {
   void _initUgvDeviceId() {
     // Intenta encontrar el UGV entre los dispositivos conectados al iniciar.
     if (bleController.connectedCharacteristics.isNotEmpty) {
-      // Usar firstWhere con orElse para manejar el caso donde no se encuentra.
+      // Uso de firstWhereOrNull para manejar el caso donde no se encuentra,
+      // evitando el error de tipo al devolver null directamente.
       final ugvEntry =
-          bleController.connectedCharacteristics.entries.firstWhere(
+          bleController.connectedCharacteristics.entries.firstWhereOrNull(
         (entry) =>
             entry.value.uuid.toString().toLowerCase() ==
             BleController.characteristicUuidUGV,
-        orElse: () => MapEntry(
-            '',
-            bleController.connectedCharacteristics.values.isNotEmpty
-                ? bleController.connectedCharacteristics.values.first
-                : throw Exception(
-                    'No BluetoothCharacteristic found')), // Devuelve una entrada vacía si no se encuentra
       );
-      if (ugvEntry.value != null) {
-        // Verificar si realmente se encontró una característica
+      if (ugvEntry != null) {
+        // Comprobar si se encontró una entrada
         ugvDeviceId = ugvEntry.key;
       }
     }
@@ -116,19 +151,13 @@ class _ModoUgvState extends State<ModoUgv> {
     ever(bleController.connectedDevices, (devices) {
       if (ugvDeviceId == null && devices.isNotEmpty) {
         final ugvEntry =
-            bleController.connectedCharacteristics.entries.firstWhere(
+            bleController.connectedCharacteristics.entries.firstWhereOrNull(
           (entry) =>
               entry.value.uuid.toString().toLowerCase() ==
               BleController.characteristicUuidUGV,
-          orElse: () => MapEntry(
-              '',
-              bleController.connectedCharacteristics.values.isNotEmpty
-                  ? bleController.connectedCharacteristics.values.first
-                  : throw Exception(
-                      'No BluetoothCharacteristic found')), // Devuelve una entrada vacía si no se encuentra
         );
-        if (ugvEntry.value != null) {
-          // Verificar si realmente se encontró una característica
+        if (ugvEntry != null) {
+          // Comprobar si se encontró una entrada
           ugvDeviceId = ugvEntry.key;
         }
       }
@@ -146,8 +175,7 @@ class _ModoUgvState extends State<ModoUgv> {
       _lastSentDirectionalCommand = command;
       _sendBleCommand(command);
       _updatePosition(command); // Actualiza la posición visual en el mapa.
-      bleController.isAutomaticMode.value =
-          false; // Desactivar modo automático al iniciar movimiento manual
+      // El modo automático NO se desactiva aquí.
     }
   }
 
@@ -157,17 +185,33 @@ class _ModoUgvState extends State<ModoUgv> {
     _sendBleCommand(BleController.stop);
     _lastSentDirectionalCommand =
         BleController.stop; // Resetear el último comando direccional
-    bleController.isAutomaticMode.value =
-        false; // Desactivar modo automático al parar
+    // El modo automático NO se desactiva aquí.
+  }
+
+  /// Interrumpe el movimiento actual del UGV.
+  /// Este método se usa para detener cualquier movimiento en curso, como cuando se presiona el botón "Stop".
+  void _interruptMovement() {
+    // Interrumpe el movimiento actual del UGV.
+    _sendBleCommand(BleController.interruption);
+    _lastSentDirectionalCommand =
+        BleController.interruption; // Resetear el último comando direccional
+    // Este SÍ desactiva el modo automático de forma brusca y reactiva los controles manuales inmediatamente.
+    bleController.isAutomaticMode.value = false;
+    _awaitingFinalTForManualControlsReactivation.value =
+        false; // Reactivar controles manuales inmediatamente
   }
 
   /// Envía un comando BLE al dispositivo UGV.
   /// Implementa un control para que el SnackBar de advertencia no se repita innecesariamente.
   void _sendBleCommand(String commandToSend) {
     if (ugvDeviceId != null && bleController.isDeviceConnected(ugvDeviceId!)) {
+      _logger.d(
+          "Attempting to send BLE command: $commandToSend to UGV ID: $ugvDeviceId"); // Log detallado
       bleController.sendData(ugvDeviceId!, commandToSend);
       _connectionSnackbarShown = false;
     } else {
+      _logger.w(
+          "Cannot send BLE command '$commandToSend': UGV not connected or ugvDeviceId is null."); // Log de advertencia
       // Si no hay UGV conectado, solo muestra el SnackBar si no se ha mostrado antes.
       if (!_connectionSnackbarShown) {
         Get.snackbar("Advertencia",
@@ -218,11 +262,7 @@ class _ModoUgvState extends State<ModoUgv> {
     if (ugvDeviceId != null && bleController.isDeviceConnected(ugvDeviceId!)) {
       bleController.toggleRecording(ugvDeviceId!);
       _connectionSnackbarShown = false;
-      // Al iniciar grabación, podríamos querer desactivar el modo automático si estaba activo
-      if (_isRecording.value) {
-        // Si se acaba de activar la grabación
-        bleController.isAutomaticMode.value = false;
-      }
+      // El modo automático NO se desactiva aquí.
     } else {
       // Si no hay UGV conectado, solo muestra el SnackBar si no se ha mostrado antes.
       if (!_connectionSnackbarShown) {
@@ -236,15 +276,33 @@ class _ModoUgvState extends State<ModoUgv> {
     }
   }
 
-  /// Inicia el modo automático del UGV.
-  void _startAutomaticMode() {
+  /// --- LÓGICA CORREGIDA PARA EL BOTÓN 'AUTO' ---
+  /// Alterna el estado del modo automático del UGV.
+  void _toggleAutomaticMode() {
     if (ugvDeviceId != null && bleController.isDeviceConnected(ugvDeviceId!)) {
-      bleController.startAutomaticMode(ugvDeviceId!);
+      // Si el modo automático estaba activo (botón rojo) y lo vamos a desactivar
+      if (bleController.isAutomaticMode.value) {
+        _logger.i("Disabling automatic mode from App.");
+        bleController.isAutomaticMode.value =
+            false; // Desactiva el estado en el controller (botón azul)
+        // Establecer la bandera para esperar la 'T' final antes de reactivar controles manuales.
+        _awaitingFinalTForManualControlsReactivation.value = true;
+        // ¡NO ENVIAR NINGÚN COMANDO DE STOP AQUI! El ESP32 terminará su ciclo o ya se detuvo.
+      } else {
+        // Si el modo automático estaba inactivo (botón azul) y lo vamos a activar
+        _logger.i("Enabling automatic mode from App.");
+        bleController.isAutomaticMode.value =
+            true; // Activa el estado en el controller (botón rojo)
+        _sendBleCommand(BleController
+            .startAutoMode); // Envía 'A' para iniciar el modo automático
+        bleController.isRecording.value =
+            false; // Desactiva la grabación si estaba activa
+        _awaitingFinalTForManualControlsReactivation.value =
+            false; // Resetear la bandera si se activa Auto
+      }
       _connectionSnackbarShown = false;
-      // Al activar el modo automático, desactivar la grabación si estaba activa
-      bleController.isRecording.value = false;
     } else {
-      // Si no hay UGV conectado, solo muestra el SnackBar si no se ha mostrado antes.
+      // Si no hay UGV conectado
       if (!_connectionSnackbarShown) {
         Get.snackbar(
             "Advertencia", "No hay UGV conectado para modo automático.",
@@ -361,41 +419,61 @@ class _ModoUgvState extends State<ModoUgv> {
             _buildCompactActionButtons(context), // Botones de Grabar y Auto
             const SizedBox(height: 12),
             // Botones direccionales
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildDirectionButton(
-                  icon: Icons.arrow_upward,
-                  command: BleController.moveForward,
-                  size: buttonSize,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _buildDirectionButton(
-                      icon: Icons.arrow_back,
-                      command: BleController.moveLeft,
-                      size: buttonSize,
-                    ),
-                    SizedBox(
-                        width: constraints.maxWidth *
-                            0.2), // Espacio entre Left y Right
-                    _buildDirectionButton(
-                      icon: Icons.arrow_forward,
-                      command: BleController.moveRight,
-                      size: buttonSize,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                _buildDirectionButton(
-                  icon: Icons.arrow_downward,
-                  command: BleController.moveBack,
-                  size: buttonSize,
-                ),
-              ],
-            ),
+            // Envuelto en Obx para que reaccione a los cambios en isAutomaticMode.value
+            Obx(() {
+              // Determina si los botones de movimiento deben estar habilitados.
+              // Estarán habilitados si el UGV está conectado
+              // Y el modo automático NO está activo
+              // Y NO estamos esperando la 'T' final para reactivar los controles (solo cuando se desactiva con el botón Auto).
+              final bool areMovementButtonsEnabled =
+                  bleController.isUgvConnected.value &&
+                      !bleController.isAutomaticMode.value &&
+                      !_awaitingFinalTForManualControlsReactivation.value;
+
+              return Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildDirectionButton(
+                    icon: Icons.arrow_upward,
+                    command: BleController.moveForward,
+                    size: buttonSize,
+                    isEnabled:
+                        areMovementButtonsEnabled, // Controla la habilitación
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildDirectionButton(
+                        icon: Icons.arrow_back,
+                        command: BleController.moveLeft,
+                        size: buttonSize,
+                        isEnabled:
+                            areMovementButtonsEnabled, // Controla la habilitación
+                      ),
+                      SizedBox(
+                          width: constraints.maxWidth *
+                              0.2), // Espacio entre Left y Right
+                      _buildDirectionButton(
+                        icon: Icons.arrow_forward,
+                        command: BleController.moveRight,
+                        size: buttonSize,
+                        isEnabled:
+                            areMovementButtonsEnabled, // Controla la habilitación
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _buildDirectionButton(
+                    icon: Icons.arrow_downward,
+                    command: BleController.moveBack,
+                    size: buttonSize,
+                    isEnabled:
+                        areMovementButtonsEnabled, // Controla la habilitación
+                  ),
+                ],
+              );
+            }), // Fin de Obx
           ],
         );
       },
@@ -409,12 +487,25 @@ class _ModoUgvState extends State<ModoUgv> {
       children: [
         // Botón "Grabar" - usa Obx para reaccionar al estado de grabación
         Obx(
-          () => _buildCompactActionButton(
-            text: 'Grabar',
-            icon: FontAwesomeIcons.circle,
-            onPressed: _toggleRecording,
-            isActive: _isRecording.value, // El color depende de este valor
-          ),
+          () {
+            // Determina si el botón Grabar debe estar habilitado.
+            // Estará habilitado si el UGV está conectado
+            // Y el modo automático NO está activo
+            // Y NO estamos esperando la 'T' final para reactivar los controles.
+            final bool isRecordButtonEnabled =
+                bleController.isUgvConnected.value &&
+                    !bleController.isAutomaticMode.value &&
+                    !_awaitingFinalTForManualControlsReactivation.value;
+
+            return _buildCompactActionButton(
+              text: 'Grabar',
+              icon: FontAwesomeIcons.circle,
+              onPressed: isRecordButtonEnabled
+                  ? _toggleRecording
+                  : null, // Habilitación controlada
+              isActive: _isRecording.value, // El color depende de este valor
+            );
+          },
         ),
         const SizedBox(width: 12),
         // Botón "Auto" - usa Obx para reaccionar al estado del modo automático
@@ -422,7 +513,9 @@ class _ModoUgvState extends State<ModoUgv> {
           () => _buildCompactActionButton(
             text: 'Auto',
             icon: FontAwesomeIcons.robot,
-            onPressed: _startAutomaticMode,
+            onPressed: bleController.isUgvConnected.value
+                ? _toggleAutomaticMode // Habilitado si el UGV está conectado
+                : null, // Deshabilitado si no está conectado
             isActive: bleController
                 .isAutomaticMode.value, // El color depende de este valor
           ),
@@ -435,7 +528,7 @@ class _ModoUgvState extends State<ModoUgv> {
   Widget _buildCompactActionButton({
     required String text,
     required IconData icon,
-    required Function() onPressed,
+    required Function()? onPressed, // onPressed puede ser nulo
     bool isActive =
         false, // Determina el color del botón (ej. rojo para grabar, verde/azul para auto)
   }) {
@@ -444,9 +537,11 @@ class _ModoUgvState extends State<ModoUgv> {
       child: ElevatedButton.icon(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: isActive
-              ? Colors.red // Rojo si está activo (ej. grabando)
-              : Colors.blue, // Colores dinámicos
+          backgroundColor: onPressed == null
+              ? Colors.grey // Gris si está deshabilitado
+              : isActive
+                  ? Colors.red // Rojo si está activo (ej. grabando)
+                  : Colors.blue, // Colores dinámicos
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
@@ -464,16 +559,23 @@ class _ModoUgvState extends State<ModoUgv> {
     required IconData icon,
     required String command,
     required double size,
+    bool isEnabled = true, // Nuevo parámetro para controlar la habilitación
   }) {
     return GestureDetector(
-      onTapDown: (_) => _startMovement(command), // Al presionar
-      onTapUp: (_) => _stopMovement(), // Al soltar
-      onTapCancel: () => _stopMovement(), // Al cancelar (ej. arrastrar fuera)
+      onTapDown: isEnabled
+          ? (_) => _startMovement(command)
+          : null, // Solo si está habilitado
+      onTapUp:
+          isEnabled ? (_) => _stopMovement() : null, // Solo si está habilitado
+      onTapCancel:
+          isEnabled ? () => _stopMovement() : null, // Solo si está habilitado
       child: Container(
         width: size,
         height: size,
         decoration: BoxDecoration(
-          color: Colors.blue,
+          color: isEnabled
+              ? Colors.blue
+              : Colors.grey, // Color dinámico según habilitación
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
@@ -492,10 +594,14 @@ class _ModoUgvState extends State<ModoUgv> {
   /// Construye el botón flotante de "Stop".
   Widget _buildCompactStopButton() {
     return FloatingActionButton(
-      heroTag: 'stop',
+      heroTag:
+          'stop', // Realmente es una interrupción, pero se usa "stop" para la UI
       mini: false,
       backgroundColor: Colors.red,
-      onPressed: _stopMovement, // Llama directamente a _stopMovement
+      onPressed: bleController
+              .isUgvConnected.value // Habilitado solo si el UGV está conectado
+          ? _interruptMovement
+          : null,
       child: const FaIcon(FontAwesomeIcons.stop, size: 24, color: Colors.white),
     );
   }
@@ -506,7 +612,10 @@ class _ModoUgvState extends State<ModoUgv> {
       heroTag: 'reset',
       mini: false,
       backgroundColor: Colors.blueAccent,
-      onPressed: _resetRecorrido,
+      onPressed: bleController
+              .isUgvConnected.value // Habilitado solo si el UGV está conectado
+          ? _resetRecorrido
+          : null,
       child: const Icon(Icons.refresh, size: 24, color: Colors.white),
     );
   }

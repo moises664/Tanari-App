@@ -31,6 +31,13 @@ class AppColors {
   static const Color backgroundWhite = Color(0xFFFFFFFF); // Blanco
   static const Color backgroundSecondary = Color(0xff707266); // Gris muy claro
 
+  /// **NUEVO: Color de fondo claro para paneles o tarjetas.**
+  /// Ideal para usar en contenedores como los paneles de datos o control,
+  /// que necesitan diferenciarse ligeramente del fondo principal, pero
+  /// manteniendo una estética clara y limpia.
+  static const Color backgroundLight =
+      Color(0xFFE0E0E0); // Gris claro más oscuro que backgroundPrimary
+
   /// Color de fondo secundario para secciones oscuras.
   static const Color backgroundBlack = Color(0xFF0D0D0D); // Negro intenso
 
