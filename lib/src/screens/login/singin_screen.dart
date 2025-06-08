@@ -1,17 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:icons_plus/icons_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tanari_app/src/controllers/data/database_helper.dart';
+import 'package:tanari_app/src/controllers/services/auth_service.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
-import 'package:tanari_app/src/screens/home/home_screen.dart';
 import 'package:tanari_app/src/screens/login/signup_screen.dart';
-import 'package:tanari_app/src/screens/login/forget_password.dart'; // ¡Asegúrate de importar ForgetPassword!
+import 'package:tanari_app/src/screens/login/forget_password.dart';
 import 'package:tanari_app/src/widgets/custom_scaffold.dart';
 import 'package:get/get.dart';
 
-/// Pantalla de inicio de sesión que maneja autenticación local
-/// utilizando SQLite para almacenamiento de usuarios y SharedPreferences
-/// para recordar credenciales.
+/// Pantalla de inicio de sesión que maneja autenticación con Supabase
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
 
@@ -24,12 +20,21 @@ class _SignInScreenState extends State<SignInScreen> {
   bool rememberPassword = false;
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final DatabaseHelper _dbHelper = DatabaseHelper.instance;
+
+  // Obtener la instancia del AuthService que ya inyectamos en main.dart
+  final AuthService _authService = Get.find<AuthService>();
 
   @override
   void initState() {
     super.initState();
     _loadSavedCredentials(); // Carga credenciales guardadas al iniciar
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   /// Carga las credenciales guardadas en SharedPreferences
@@ -58,38 +63,19 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
-  /// Maneja el proceso de autenticación
+  /// Maneja el proceso de autenticación con Supabase
   Future<void> _handleLogin() async {
     if (_formSignInKey.currentState!.validate()) {
-      // Verificar credenciales en la base de datos
-      final user = await _dbHelper.getUser(_emailController.text);
+      // Guardar preferencias de "Recordarme"
+      await _saveCredentials();
 
-      if (user != null && user['password'] == _passwordController.text) {
-        await _saveCredentials(); // Guardar preferencias
-
-        // Mostrar feedback al usuario
-        // ignore: use_build_context_synchronously
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Autenticación exitosa'),
-            duration: Duration(seconds: 1),
-          ),
-        );
-
-        // Navegar a HomeScreen después de 1 segundo
-        await Future.delayed(const Duration(seconds: 1));
-
-        // --- CAMBIO AQUÍ: Usar Get.offAll para reemplazar todas las rutas anteriores ---
-        Get.offAll(() => const HomeScreen());
-      } else {
-        // ignore: use_build_context_synchronously
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Credenciales incorrectas'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      // Llamar al método signIn del AuthService de Supabase
+      await _authService.signIn(
+        _emailController.text,
+        _passwordController.text,
+      );
+      // La navegación a HomeScreen se manejará automáticamente en main.dart
+      // gracias al listener de authService.currentUser.
     }
   }
 
@@ -131,13 +117,14 @@ class _SignInScreenState extends State<SignInScreen> {
               const SizedBox(height: 25.0),
               _buildPasswordField(),
               const SizedBox(height: 25.0),
-              _buildRememberForgotRow(), // Aquí está el cambio
+              _buildRememberForgotRow(),
               const SizedBox(height: 25.0),
-              _buildLoginButton(),
+              // Envuelve el botón en Obx para reaccionar al estado de carga del AuthService
+              Obx(() => _authService.isLoading.value
+                  ? const CircularProgressIndicator() // Muestra un cargando
+                  : _buildLoginButton()),
               const SizedBox(height: 25.0),
-              _buildSocialLoginDivider(),
-              const SizedBox(height: 25.0),
-              _buildSocialIconsRow(),
+              // --- ELIMINADO: _buildSocialLoginDivider() y _buildSocialIconsRow() ---
               const SizedBox(height: 25.0),
               _buildSignUpLink(),
               const SizedBox(height: 20.0),
@@ -166,7 +153,8 @@ class _SignInScreenState extends State<SignInScreen> {
       controller: _emailController,
       validator: (value) {
         if (value == null || value.isEmpty) return 'Campo obligatorio';
-        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+        if (!GetUtils.isEmail(value)) {
+          // Usamos el validador de email de GetX
           return 'Email inválido';
         }
         return null;
@@ -230,7 +218,6 @@ class _SignInScreenState extends State<SignInScreen> {
           ],
         ),
         GestureDetector(
-          // --- CAMBIO CLAVE AQUÍ: Agregar el onTap para navegar a ForgetPassword ---
           onTap: () {
             Get.to(() => const ForgetPassword());
           },
@@ -268,47 +255,6 @@ class _SignInScreenState extends State<SignInScreen> {
     );
   }
 
-  /// Divisor para login con redes sociales
-  Widget _buildSocialLoginDivider() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Expanded(
-          child: Divider(
-            thickness: 0.7,
-            color: Colors.grey.withAlpha(128),
-          ),
-        ),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 10),
-          child: Text(
-            'Iniciar sesión con',
-            style: TextStyle(color: Colors.black45),
-          ),
-        ),
-        Expanded(
-          child: Divider(
-            thickness: 0.7,
-            color: Colors.grey.withAlpha(128),
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// Iconos de redes sociales para login
-  Widget _buildSocialIconsRow() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        Brand(Brands.facebook, size: 32),
-        Brand(Brands.twitter, size: 32),
-        Brand(Brands.google, size: 32),
-        Brand(Brands.apple_logo, size: 32),
-      ],
-    );
-  }
-
   /// Enlace para registrar nueva cuenta
   Widget _buildSignUpLink() {
     return Row(
@@ -320,7 +266,6 @@ class _SignInScreenState extends State<SignInScreen> {
         ),
         GestureDetector(
           onTap: () {
-            // --- CAMBIO AQUÍ: Usar Get.to para navegar a la pantalla de registro ---
             Get.to(() => const SignUpScreen());
           },
           child: Text(

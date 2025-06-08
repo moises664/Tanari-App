@@ -1,9 +1,9 @@
 // En HomeScreen.dart
 import 'package:flutter/material.dart';
 import 'package:icons_plus/icons_plus.dart';
+import 'package:tanari_app/src/controllers/services/auth_service.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
 import 'package:tanari_app/src/screens/home/home_tab.dart';
-import 'package:tanari_app/src/screens/login/singin_screen.dart';
 import 'package:tanari_app/src/screens/menu/acerca_app.dart';
 import 'package:tanari_app/src/screens/menu/comunicacion_ble.dart';
 import 'package:tanari_app/src/screens/menu/historial_app.dart';
@@ -21,6 +21,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // Obtener la instancia del AuthService
+  final AuthService _authService = Get.find<AuthService>();
+
   // 1. BottomNav: Variable para el índice seleccionado en el Bottom Navigation Bar
   int _selectedIndex = 0;
 
@@ -39,24 +42,21 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // Nuevo método para manejar el cierre de sesión
-  void _logout() {
-    // Aquí puedes añadir lógica de limpieza, como borrar tokens, datos de usuario, etc.
-    // Por ejemplo, si usas GetStorage o Shared_preferences:
-    // GetStorage().erase(); // o prefs.clear();
+  // Nuevo método para manejar el cierre de sesión con Supabase
+  void _logout() async {
+    // Cierra el Drawer primero para una mejor UX
+    if (Scaffold.of(context).isDrawerOpen) {
+      Navigator.pop(context);
+    }
 
-    // Navega al login y elimina todas las rutas anteriores
-    // Asegúrate de que tu ruta de login esté definida en GetX o como una ruta normal
-    // Ejemplo usando GetX (si tienes la ruta 'login'):
-    //Get.offAllNamed('/login'); // Asume que tu ruta de login se llama '/login'
+    // Llama al método signOut de tu AuthService
+    await _authService.signOut();
 
-    Get.offAll(() => const SignInScreen());
-
-    // Si no usas GetX para rutas, sería algo como:
-    // Navigator.of(context).pushAndRemoveUntil(
-    //  MaterialPageRoute(builder: (context) => const LoginPage()), // Reemplaza LoginPage con tu pantalla de login
-    //  (Route<dynamic> route) => false, // Elimina todas las rutas anteriores
-    // );
+    // El AuthService ya maneja la navegación a la pantalla de login en su listener
+    // Si quieres forzar una navegación inmediata aquí, puedes usar:
+    // Get.offAll(() => const SignInScreen());
+    // Sin embargo, es más robusto dejar que el listener en AuthService se encargue,
+    // ya que reaccionará al evento de cierre de sesión de Supabase.
   }
 
   @override
@@ -64,45 +64,43 @@ class _HomeScreenState extends State<HomeScreen> {
     // === CAMBIO CLAVE: PopScope para interceptar el botón de regresar ===
     return PopScope(
       canPop: false, // Impide que el botón de regresar haga pop por defecto
-      // ignore: deprecated_member_use
       onPopInvoked: (didPop) {
         if (didPop) {
           return; // Ya se hizo pop, no hagas nada más
         }
         // Opcional: Mostrar un diálogo para confirmar si el usuario quiere salir
-        // showDialog(
-        //  context: context,
-        //  builder: (context) => AlertDialog(
-        //  title: const Text('Salir de la aplicación'),
-        //  content: const Text('¿Estás seguro de que quieres salir?'),
-        //  actions: <Widget>[
-        //  TextButton(
-        //  onPressed: () => Navigator.of(context).pop(false),
-        //  child: const Text('No'),
-        //  ),
-        //  TextButton(
-        //  onPressed: () => Navigator.of(context).pop(true),
-        //  child: const Text('Sí'),
-        //  ),
-        //  ],
-        //  ),
-        // ).then((value) {
-        //  if (value == true) {
-        //  // Si el usuario confirma, sal de la aplicación
-        //  // Puedes usar SystemChannels.platform.invokeMethod('SystemNavigator.pop');
-        //  // o simplemente dejar que el sistema operativo maneje el pop si no hay más rutas
-        //  }
-        // });
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Salir de la aplicación'),
+            content: const Text('¿Estás seguro de que quieres salir?'),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('No'),
+              ),
+              TextButton(
+                onPressed: () {
+                  // Si el usuario confirma, sal de la aplicación
+                  // SystemNavigator.pop() cierra la aplicación.
+                  // Solo usar si quieres que la app se cierre completamente al pulsar atrás en Home
+                  // Si prefieres que simplemente no haga nada, o que vaya al fondo, puedes omitirlo.
+                  Navigator.of(context).pop(true); // Cierra el diálogo
+                  // SystemNavigator.pop(); // Descomenta si quieres salir de la app
+                },
+                child: const Text('Sí'),
+              ),
+            ],
+          ),
+        );
       },
       child: Scaffold(
         appBar: AppBar(
           title: Container(
             padding: const EdgeInsets.all(15),
             decoration: const BoxDecoration(
-              //color: AppColors.primary,
               borderRadius: BorderRadius.all(Radius.circular(50)),
             ),
-            //margin: EdgeInsets.all(20),
             child: const Text(
               'TANARI',
               style: TextStyle(
@@ -203,10 +201,16 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.white,
         child: ListView(
           children: [
-            const UserAccountsDrawerHeader(
-              decoration: BoxDecoration(color: Colors.blueGrey),
-              accountName: Text('Moises Rivera'),
-              accountEmail: Text('moiseselizerrivera@gmail.com'),
+            // UserAccountsDrawerHeader debe mostrar los datos del usuario actual de Supabase
+            // Tendrás que obtener el usuario de AuthService para esto.
+            // Por ahora, lo dejamos con datos quemados, pero ten en cuenta la actualización futura.
+            UserAccountsDrawerHeader(
+              decoration: const BoxDecoration(color: Colors.blueGrey),
+              accountName: Text(_authService
+                      .currentUser.value?.userMetadata?['username'] ??
+                  'Usuario Tanari'), // Ejemplo: si guardaste el username en user_metadata
+              accountEmail: Text(_authService.currentUser.value?.email ??
+                  'correo@ejemplo.com'),
               currentAccountPicture: CircleAvatar(
                 backgroundColor: Colors.blueAccent,
                 child: Icon(Icons.person, size: 40, color: Colors.white),
@@ -268,7 +272,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.bluetooth),
-              title: const Text('Comunicacion  BLE'),
+              title: const Text('Comunicacion BLE'),
               onTap: () {
                 Get.to(() => ComunicacionBleScreen());
               },
@@ -284,8 +288,8 @@ class _HomeScreenState extends State<HomeScreen> {
               leading: const Icon(Icons.logout),
               title: const Text('Cerrar sesión'),
               onTap: () {
-                Navigator.pop(context); // Cierra el drawer primero
-                _logout(); // Llama a la nueva función de cierre de sesión
+                // Llama al método _logout que ahora usa AuthService
+                _logout();
               },
             ),
           ],

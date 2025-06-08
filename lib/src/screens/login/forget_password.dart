@@ -1,111 +1,173 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:tanari_app/src/controllers/data/reset_password_local.dart';
-import 'package:tanari_app/src/core/app_colors.dart'; // Asegúrate de importar tus colores
+import 'package:tanari_app/src/controllers/services/auth_service.dart';
+import 'package:tanari_app/src/core/app_colors.dart';
+import 'package:tanari_app/src/widgets/custom_scaffold.dart'; // Mantén si lo usas o elimina si no
 
-class ForgetPassword extends StatelessWidget {
+class ForgetPassword extends StatefulWidget {
   const ForgetPassword({super.key});
 
   @override
+  State<ForgetPassword> createState() => _ForgetPasswordState();
+}
+
+class _ForgetPasswordState extends State<ForgetPassword> {
+  final TextEditingController _emailController = TextEditingController();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  // Obtener la instancia del AuthService
+  final AuthService _authService = Get.find<AuthService>();
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  /// Maneja la solicitud de restablecimiento de contraseña
+  Future<void> _handleResetPassword() async {
+    if (_formKey.currentState!.validate()) {
+      await _authService.resetPasswordForEmail(_emailController.text);
+      // El AuthService ya muestra un snackbar de éxito o error
+      // Puedes añadir navegación de vuelta al login si lo deseas aquí,
+      // o dejar que el usuario permanezca en esta pantalla después del envío.
+      // Get.back(); // Para regresar a la pantalla de inicio de sesión
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Recuperar Contraseña'),
-        backgroundColor: AppColors.backgroundPrimary, // Usando tu color
-        foregroundColor: AppColors.textPrimary, // Usando tu color
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 25.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Text(
-                'Selecciona una opción para recuperar tu contraseña:',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.backgroundBlack,
+    // Usamos CustomScaffold si quieres el mismo fondo y estructura de SignIn/SignUp
+    return CustomScaffold(
+      child: Column(
+        children: [
+          const Expanded(flex: 1, child: SizedBox(height: 10)),
+          Expanded(
+            flex: 7,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(25.0, 50.0, 25.0, 20.0),
+              decoration: const BoxDecoration(
+                color: AppColors.backgroundWhite,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(40.0),
+                  topRight: Radius.circular(40.0),
                 ),
               ),
-              const SizedBox(height: 40),
-
-              // Opción 1: Recuperar con Correo
-              _buildOptionButton(
-                context: context,
-                text: 'Recuperar con Correo Electrónico',
-                icon: Icons.email,
-                onTap: () {
-                  // Muestra un mensaje temporal ya que el backend no está conectado
-                  Get.snackbar(
-                    'Función no disponible',
-                    'La recuperación por correo no está activa aún. Por favor, contacta a soporte.',
-                    snackPosition: SnackPosition.BOTTOM,
-                    backgroundColor: Colors.orange,
-                    colorText: Colors.white,
-                    duration: const Duration(seconds: 3),
-                  );
-                  // O un diálogo más formal
-                  // Get.defaultDialog(
-                  //   title: 'En Construcción',
-                  //   middleText: 'La funcionalidad de recuperación por correo estará disponible pronto.',
-                  //   textConfirm: 'Entendido',
-                  //   confirmTextColor: Colors.white,
-                  //   onConfirm: () => Get.back(),
-                  // );
-                },
-                color: AppColors.primary, // Usando tu color primario
+              child: SingleChildScrollView(
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: <Widget>[
+                      Text(
+                        'Restablecer Contraseña',
+                        style: TextStyle(
+                          fontSize: 30.0,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(height: 40),
+                      Text(
+                        'Ingresa tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      const SizedBox(height: 30),
+                      TextFormField(
+                        controller: _emailController,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Por favor, ingresa tu correo electrónico';
+                          }
+                          if (!GetUtils.isEmail(value)) {
+                            return 'Email inválido';
+                          }
+                          return null;
+                        },
+                        decoration: _inputDecoration(
+                            'Correo Electrónico', 'ejemplo@correo.com'),
+                        keyboardType: TextInputType.emailAddress,
+                      ),
+                      const SizedBox(height: 30),
+                      Obx(
+                        () => _authService.isLoading.value
+                            ? const CircularProgressIndicator()
+                            : SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton(
+                                  onPressed: _handleResetPassword,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.backgroundBlack,
+                                    foregroundColor: AppColors.primary,
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 15),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  child: const Text('Enviar Enlace',
+                                      style: TextStyle(fontSize: 16)),
+                                ),
+                              ),
+                      ),
+                      const SizedBox(height: 20),
+                      _buildSignInLink(), // Enlace para volver al login
+                    ],
+                  ),
+                ),
               ),
-
-              const SizedBox(height: 20),
-
-              // Opción 2: Acceder a la Base de Datos Local
-              _buildOptionButton(
-                context: context,
-                text: 'Cambiar en Base de Datos Local',
-                icon: Icons.data_usage,
-                onTap: () {
-                  Get.to(() => const ResetPasswordLocalDB());
-                },
-                color:
-                    AppColors.backgroundBlack, // Usando tu color de fondo negro
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  // Método auxiliar para construir los botones de opción
-  Widget _buildOptionButton({
-    required BuildContext context,
-    required String text,
-    required IconData icon,
-    required VoidCallback onTap,
-    required Color color,
-  }) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: onTap,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
+  // Método auxiliar para el estilo de los inputs
+  InputDecoration _inputDecoration(String label, String hint) {
+    return InputDecoration(
+      label: Text(label),
+      hintText: hint,
+      hintStyle: const TextStyle(color: Colors.black26),
+      border: _inputBorder(),
+      enabledBorder: _inputBorder(),
+      focusedBorder: _inputBorder(color: AppColors.primary),
+    );
+  }
+
+  OutlineInputBorder _inputBorder({Color color = Colors.black12}) {
+    return OutlineInputBorder(
+      borderSide: BorderSide(color: color),
+      borderRadius: BorderRadius.circular(10),
+    );
+  }
+
+  // Enlace para volver a la pantalla de inicio de sesión
+  Widget _buildSignInLink() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Text(
+          '¿Recordaste tu contraseña? ',
+          style: TextStyle(color: Colors.black45),
+        ),
+        GestureDetector(
+          onTap: () {
+            Get.back(); // Simplemente regresa a la pantalla anterior (SignInScreen)
+          },
+          child: Text(
+            'Inicia sesión',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: AppColors.secondary,
+            ),
           ),
-          elevation: 5,
         ),
-        icon: Icon(icon, size: 28),
-        label: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-      ),
+      ],
     );
   }
 }

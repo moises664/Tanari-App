@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:icons_plus/icons_plus.dart';
-import 'package:tanari_app/src/controllers/data/database_helper.dart';
+import 'package:tanari_app/src/controllers/services/auth_service.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
 import 'package:tanari_app/src/screens/login/singin_screen.dart';
 import 'package:tanari_app/src/widgets/custom_scaffold.dart';
-import 'package:get/get.dart'; // ¡Importa GetX aquí también!
+import 'package:get/get.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -19,52 +18,41 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
+  // Obtener la instancia del AuthService que ya inyectamos en main.dart
+  final AuthService _authService = Get.find<AuthService>();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  /// Maneja el proceso de registro con Supabase
   Future<void> _handleSignUp() async {
-    if (!_formSignupKey.currentState!.validate() || !agreePersonalData) return;
+    if (_formSignupKey.currentState!.validate() && agreePersonalData) {
+      // Llamar al método signUp del AuthService de Supabase
+      await _authService.signUp(
+        _emailController.text,
+        _passwordController.text,
+        _nameController.text, // Pasamos el nombre como username
+      );
+      // La navegación a HomeScreen (después de un registro exitoso)
+      // se manejará automáticamente en main.dart gracias al listener de authService.currentUser.
+      // Si el registro falla, AuthService mostrará un snackbar de error.
 
-    // Ya no necesitas 'currentContext' si usas Get.to o Get.offAll
-    try {
-      final existingUser = await _dbHelper.getUser(_emailController.text);
-
-      if (existingUser == null) {
-        await _dbHelper.insertUser(
-          _nameController.text,
-          _emailController.text,
-          _passwordController.text,
-        );
-
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          // Puedes seguir usando context para ScaffoldMessenger
-          const SnackBar(
-            content: Text('Registro exitoso! Redirigiendo...'),
-            duration: Duration(seconds: 1),
-          ),
-        );
-
-        await Future.delayed(const Duration(seconds: 1));
-
-        if (!mounted) return;
-        // --- CAMBIO AQUÍ: Usar Get.offAll para reemplazar todas las rutas anteriores ---
-        Get.offAll(() => const SignInScreen());
-      } else {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('El email ya está registrado'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error en el registro: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
+      // En el caso de éxito, el listener de AuthService en main.dart
+      // detectará el 'signedIn' event y redirigirá.
+      // No necesitamos Get.offAll aquí, ya que AuthService se encargará de la redirección.
+    } else if (!agreePersonalData) {
+      Get.snackbar(
+        "Advertencia",
+        "Debes aceptar el procesamiento de datos personales.",
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.amber,
+        colorText: Colors.black,
       );
     }
   }
@@ -110,11 +98,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
               const SizedBox(height: 25.0),
               _buildAgreementRow(),
               const SizedBox(height: 25.0),
-              _buildSignUpButton(),
+              // Envuelve el botón en Obx para reaccionar al estado de carga del AuthService
+              Obx(() => _authService.isLoading.value
+                  ? const CircularProgressIndicator() // Muestra un cargando
+                  : _buildSignUpButton()),
               const SizedBox(height: 30.0),
-              _buildSocialLoginDivider(),
-              const SizedBox(height: 30.0),
-              _buildSocialIconsRow(),
+              // --- ELIMINADO: _buildSocialLoginDivider() y _buildSocialIconsRow() ---
               const SizedBox(height: 25.0),
               _buildSignInLink(),
               const SizedBox(height: 20.0),
@@ -140,12 +129,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return TextFormField(
       controller: _nameController,
       validator: (value) {
-        if (value == null || value.isEmpty) return 'Nombre obligatorio';
+        if (value == null || value.isEmpty) {
+          return 'Nombre de usuario obligatorio';
+        }
         if (value.length < 3) return 'Mínimo 3 caracteres';
         return null;
       },
       decoration:
-          _inputDecoration('Nombre completo', 'Ingrese su nombre completo'),
+          _inputDecoration('Nombre de Usuario', 'Ingrese su nombre de usuario'),
     );
   }
 
@@ -154,7 +145,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
       controller: _emailController,
       validator: (value) {
         if (value == null || value.isEmpty) return 'Email obligatorio';
-        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+        if (!GetUtils.isEmail(value)) {
+          // Usamos el validador de email de GetX
           return 'Email inválido';
         }
         return null;
@@ -204,13 +196,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
               setState(() => agreePersonalData = value!),
           activeColor: AppColors.primary,
         ),
-        const Text('Acepto el procesamiento ',
+        const Text('Acepto el procesamiento de ',
             style: TextStyle(color: Colors.black45)),
-        Text('datos personales',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              color: AppColors.secondary,
-            )),
+        GestureDetector(
+          // Envuelto en GestureDetector para posible interacción
+          onTap: () {
+            // Aquí puedes navegar a una pantalla con los términos y condiciones
+            Get.snackbar("Términos", "Mostrando términos y condiciones...",
+                snackPosition: SnackPosition.BOTTOM);
+          },
+          child: Text('datos personales',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppColors.secondary,
+                decoration: TextDecoration
+                    .underline, // Subrayado para indicar que es clickeable
+              )),
+        ),
       ],
     );
   }
@@ -233,43 +235,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     );
   }
 
-  Widget _buildSocialLoginDivider() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Expanded(
-          child: Divider(
-            thickness: 0.7,
-            color: Colors.grey.withAlpha(128),
-          ),
-        ),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 10),
-          child: Text('Iniciar sesión con',
-              style: TextStyle(color: Colors.black45)),
-        ),
-        Expanded(
-          child: Divider(
-            thickness: 0.7,
-            color: Colors.grey.withAlpha(128),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSocialIconsRow() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        Brand(Brands.facebook, size: 32),
-        Brand(Brands.twitter, size: 32),
-        Brand(Brands.google, size: 32),
-        Brand(Brands.apple_logo, size: 32)
-      ],
-    );
-  }
-
   Widget _buildSignInLink() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -278,9 +243,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
             style: TextStyle(color: Colors.black45)),
         GestureDetector(
           onTap: () {
-            // --- CAMBIO AQUÍ: Usar Get.to para navegar a la pantalla de inicio de sesión ---
-            // Get.to te permite ir a una nueva pantalla.
-            // Si quieres reemplazar la pantalla actual (sin poder regresar), usa Get.off(() => const SignInScreen());
             Get.to(() => const SignInScreen());
           },
           child: Text(
