@@ -69,13 +69,13 @@ class _SignInScreenState extends State<SignInScreen> {
       // Guardar preferencias de "Recordarme"
       await _saveCredentials();
 
-      // Llamar al método signIn del AuthService de Supabase
-      await _authService.signIn(
-        _emailController.text,
-        _passwordController.text,
+      // *** CORRECCIÓN CRÍTICA AQUÍ: Cambiado de signUp a signInWithEmailAndPassword ***
+      await _authService.signInWithEmailAndPassword(
+        _emailController.text.trim(), // Es buena práctica limpiar los espacios
+        _passwordController.text.trim(),
       );
       // La navegación a HomeScreen se manejará automáticamente en main.dart
-      // gracias al listener de authService.currentUser.
+      // gracias al listener de authService.currentUser y el _onAuthChange en AuthService.
     }
   }
 
@@ -120,12 +120,12 @@ class _SignInScreenState extends State<SignInScreen> {
               _buildRememberForgotRow(),
               const SizedBox(height: 25.0),
               // Envuelve el botón en Obx para reaccionar al estado de carga del AuthService
-              Obx(() => _authService.isLoading.value
+              Obx(() => _authService.isLoading
                   ? const CircularProgressIndicator() // Muestra un cargando
                   : _buildLoginButton()),
               const SizedBox(height: 25.0),
-              // --- ELIMINADO: _buildSocialLoginDivider() y _buildSocialIconsRow() ---
-              const SizedBox(height: 25.0),
+              const SizedBox(
+                  height: 25.0), // Mantengo si eliminas los social logins
               _buildSignUpLink(),
               const SizedBox(height: 20.0),
             ],

@@ -3,7 +3,7 @@ import 'package:tanari_app/src/controllers/services/auth_service.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
 import 'package:tanari_app/src/screens/login/singin_screen.dart';
 import 'package:tanari_app/src/widgets/custom_scaffold.dart';
-import 'package:get/get.dart';
+import 'package:get/get.dart'; // Asegúrate de que Get esté importado
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -33,19 +33,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
   /// Maneja el proceso de registro con Supabase
   Future<void> _handleSignUp() async {
     if (_formSignupKey.currentState!.validate() && agreePersonalData) {
-      // Llamar al método signUp del AuthService de Supabase
-      await _authService.signUp(
-        _emailController.text,
-        _passwordController.text,
-        _nameController.text, // Pasamos el nombre como username
-      );
-      // La navegación a HomeScreen (después de un registro exitoso)
-      // se manejará automáticamente en main.dart gracias al listener de authService.currentUser.
-      // Si el registro falla, AuthService mostrará un snackbar de error.
-
-      // En el caso de éxito, el listener de AuthService en main.dart
-      // detectará el 'signedIn' event y redirigirá.
-      // No necesitamos Get.offAll aquí, ya que AuthService se encargará de la redirección.
+      try {
+        await _authService.signUp(
+          _emailController.text.trim(), // Limpiar espacios
+          _passwordController.text.trim(), // Limpiar espacios
+          _nameController.text
+              .trim(), // Pasamos el nombre como username, limpiar espacios
+        );
+        // Si la llamada a signUp no lanza un error (lo que significa que el Supabase
+        // la aceptó), entonces navegamos al usuario al SignInScreen.
+        // El SnackBar de éxito ("Registro Exitoso...") ya lo maneja el AuthService.
+        Get.offAll(() =>
+            const SignInScreen()); // Navega a la pantalla de inicio de sesión
+      } catch (e) {
+        // AuthService ya muestra el snackbar de error, no necesitamos uno aquí.
+        // El `rethrow` en AuthService asegura que el error se propague aquí
+        // si quisieras manejarlo de forma diferente en la UI.
+      }
     } else if (!agreePersonalData) {
       Get.snackbar(
         "Advertencia",
@@ -98,12 +102,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
               const SizedBox(height: 25.0),
               _buildAgreementRow(),
               const SizedBox(height: 25.0),
-              // Envuelve el botón en Obx para reaccionar al estado de carga del AuthService
-              Obx(() => _authService.isLoading.value
+              // *** CORRECCIÓN: Envolver en Obx para que reaccione al estado de carga ***
+              Obx(() => _authService.isLoading // Acceder a .value del RxBool
                   ? const CircularProgressIndicator() // Muestra un cargando
                   : _buildSignUpButton()),
               const SizedBox(height: 30.0),
-              // --- ELIMINADO: _buildSocialLoginDivider() y _buildSocialIconsRow() ---
               const SizedBox(height: 25.0),
               _buildSignInLink(),
               const SizedBox(height: 20.0),
@@ -146,7 +149,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
       validator: (value) {
         if (value == null || value.isEmpty) return 'Email obligatorio';
         if (!GetUtils.isEmail(value)) {
-          // Usamos el validador de email de GetX
           return 'Email inválido';
         }
         return null;
@@ -199,9 +201,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         const Text('Acepto el procesamiento de ',
             style: TextStyle(color: Colors.black45)),
         GestureDetector(
-          // Envuelto en GestureDetector para posible interacción
           onTap: () {
-            // Aquí puedes navegar a una pantalla con los términos y condiciones
             Get.snackbar("Términos", "Mostrando términos y condiciones...",
                 snackPosition: SnackPosition.BOTTOM);
           },

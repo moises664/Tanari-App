@@ -1,4 +1,3 @@
-// En HomeScreen.dart
 import 'package:flutter/material.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:tanari_app/src/controllers/services/auth_service.dart';
@@ -11,8 +10,10 @@ import 'package:tanari_app/src/screens/menu/modos_operacion/modo_monitoreo.dart'
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_acople.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_ugv.dart';
 import 'package:tanari_app/src/screens/menu/profile_user.dart';
-import 'package:get/get.dart'; // Importar Get para el Get.offAll
+import 'package:get/get.dart';
 
+/// Pantalla principal de la aplicación después del login.
+/// Muestra un menú lateral (Drawer) y una barra de navegación inferior personalizada.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -21,13 +22,16 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Obtener la instancia del AuthService
+  // Obtener la instancia del AuthService usando GetX
   final AuthService _authService = Get.find<AuthService>();
 
-  // 1. BottomNav: Variable para el índice seleccionado en el Bottom Navigation Bar
+  // DECLARACIÓN DE LA GLOBALKEY PARA EL SCAFFOLD
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  // Variable para el índice seleccionado en el Bottom Navigation Bar
   int _selectedIndex = 0;
 
-  // 2. BottomNav: Lista de widgets que representan cada pestaña del Bottom Navigation Bar
+  // Lista de widgets que representan cada pestaña del Bottom Navigation Bar
   final List<Widget> _widgetOptions = <Widget>[
     const HomeTab(),
     const ModoMonitoreo(),
@@ -36,39 +40,22 @@ class _HomeScreenState extends State<HomeScreen> {
     const ProfileUser(),
   ];
 
+  /// Maneja el cambio de pestaña en la barra de navegación inferior
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
     });
   }
 
-  // Nuevo método para manejar el cierre de sesión con Supabase
-  void _logout() async {
-    // Cierra el Drawer primero para una mejor UX
-    if (Scaffold.of(context).isDrawerOpen) {
-      Navigator.pop(context);
-    }
-
-    // Llama al método signOut de tu AuthService
-    await _authService.signOut();
-
-    // El AuthService ya maneja la navegación a la pantalla de login en su listener
-    // Si quieres forzar una navegación inmediata aquí, puedes usar:
-    // Get.offAll(() => const SignInScreen());
-    // Sin embargo, es más robusto dejar que el listener en AuthService se encargue,
-    // ya que reaccionará al evento de cierre de sesión de Supabase.
-  }
-
   @override
   Widget build(BuildContext context) {
-    // === CAMBIO CLAVE: PopScope para interceptar el botón de regresar ===
+    // Utilizamos PopScope para interceptar el botón de regresar del dispositivo
     return PopScope(
       canPop: false, // Impide que el botón de regresar haga pop por defecto
       onPopInvoked: (didPop) {
-        if (didPop) {
-          return; // Ya se hizo pop, no hagas nada más
-        }
-        // Opcional: Mostrar un diálogo para confirmar si el usuario quiere salir
+        if (didPop) return;
+
+        // Muestra diálogo de confirmación al intentar salir
         showDialog(
           context: context,
           builder: (context) => AlertDialog(
@@ -81,12 +68,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               TextButton(
                 onPressed: () {
-                  // Si el usuario confirma, sal de la aplicación
-                  // SystemNavigator.pop() cierra la aplicación.
-                  // Solo usar si quieres que la app se cierre completamente al pulsar atrás en Home
-                  // Si prefieres que simplemente no haga nada, o que vaya al fondo, puedes omitirlo.
-                  Navigator.of(context).pop(true); // Cierra el diálogo
-                  // SystemNavigator.pop(); // Descomenta si quieres salir de la app
+                  Navigator.of(context).pop(true);
+                  // Para cerrar completamente la app:
+                  // SystemNavigator.pop();
                 },
                 child: const Text('Sí'),
               ),
@@ -95,6 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
       child: Scaffold(
+        key: _scaffoldKey, // ASIGNAR LA GLOBALKEY AL SCAFFOLD
         appBar: AppBar(
           title: Container(
             padding: const EdgeInsets.all(15),
@@ -113,22 +98,18 @@ class _HomeScreenState extends State<HomeScreen> {
           centerTitle: true,
           backgroundColor: AppColors.backgroundPrimary,
           foregroundColor: AppColors.textPrimary,
-          automaticallyImplyLeading:
-              true, // Deja que Flutter decida si mostrar el botón del Drawer
+          automaticallyImplyLeading: true,
         ),
-        drawer: _menuHome(context), // Menú lateral
-
+        drawer: _buildMenuDrawer(context), // Menú lateral
         bottomNavigationBar:
-            _buildCustomBottomNavigationBar(context), // Botton Navigation Bar
-
+            _buildCustomBottomNavigationBar(context), // Barra inferior
         backgroundColor: Colors.white,
-
-        body: _widgetOptions.elementAt(_selectedIndex),
+        body: _widgetOptions.elementAt(_selectedIndex), // Contenido principal
       ),
     );
   }
 
-  // Método que construye tu Bottom Navigation Bar personalizada
+  /// Construye la barra de navegación inferior personalizada
   Widget _buildCustomBottomNavigationBar(BuildContext context) {
     return SafeArea(
       child: Container(
@@ -163,7 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Método auxiliar para construir cada ítem de la navegación
+  /// Construye un ítem individual de la barra de navegación
   Widget _buildNavItem(int index, IconData icon, String label) {
     final bool isSelected = _selectedIndex == index;
     return GestureDetector(
@@ -196,26 +177,28 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- El resto de tu código para _menuHome (importante: modificaremos la opción de 'Cerrar sesión') ---
-  Drawer _menuHome(BuildContext context) => Drawer(
+  /// Construye el menú lateral (Drawer)
+  Drawer _buildMenuDrawer(BuildContext context) => Drawer(
         backgroundColor: Colors.white,
         child: ListView(
           children: [
-            // UserAccountsDrawerHeader debe mostrar los datos del usuario actual de Supabase
-            // Tendrás que obtener el usuario de AuthService para esto.
-            // Por ahora, lo dejamos con datos quemados, pero ten en cuenta la actualización futura.
-            UserAccountsDrawerHeader(
-              decoration: const BoxDecoration(color: Colors.blueGrey),
-              accountName: Text(_authService
-                      .currentUser.value?.userMetadata?['username'] ??
-                  'Usuario Tanari'), // Ejemplo: si guardaste el username en user_metadata
-              accountEmail: Text(_authService.currentUser.value?.email ??
-                  'correo@ejemplo.com'),
-              currentAccountPicture: CircleAvatar(
-                backgroundColor: Colors.blueAccent,
-                child: Icon(Icons.person, size: 40, color: Colors.white),
-              ),
-            ),
+            // Cabecera con información del usuario
+            Obx(() {
+              final user =
+                  _authService.currentUser; // <-- CORRECCIÓN FINAL AQUÍ
+              return UserAccountsDrawerHeader(
+                decoration: const BoxDecoration(color: Colors.blueGrey),
+                accountName:
+                    Text(user?.userMetadata?['username'] ?? 'Usuario Tanari'),
+                accountEmail: Text(user?.email ?? 'correo@ejemplo.com'),
+                currentAccountPicture: const CircleAvatar(
+                  backgroundColor: Colors.blueAccent,
+                  child: Icon(Icons.person, size: 40, color: Colors.white),
+                ),
+              );
+            }),
+
+            // Sección de Modos de Operación
             ExpansionTile(
               leading: const Icon(Icons.car_rental),
               title: const Text('Modos de Operacion'),
@@ -223,26 +206,31 @@ class _HomeScreenState extends State<HomeScreen> {
                 ListTile(
                   title: const Text('Tanari DP'),
                   onTap: () {
-                    Navigator.pop(context);
+                    // Cierra el drawer usando la GlobalKey
+                    _scaffoldKey.currentState?.closeDrawer();
                     Get.to(() => const ModoMonitoreo());
                   },
                 ),
                 ListTile(
                   title: const Text('Tanari UGV'),
                   onTap: () {
-                    Navigator.pop(context);
+                    // Cierra el drawer usando la GlobalKey
+                    _scaffoldKey.currentState?.closeDrawer();
                     Get.to(() => const ModoUgv());
                   },
                 ),
                 ListTile(
                   title: const Text('Acople'),
                   onTap: () {
-                    Navigator.pop(context);
+                    // Cierra el drawer usando la GlobalKey
+                    _scaffoldKey.currentState?.closeDrawer();
                     Get.to(() => const ModoAcople());
                   },
                 ),
               ],
             ),
+
+            // Sección de Historial
             ExpansionTile(
               leading: const Icon(Icons.history),
               title: const Text('Historial'),
@@ -250,46 +238,62 @@ class _HomeScreenState extends State<HomeScreen> {
                 ListTile(
                   title: const Text('Historial de Monitoreo'),
                   onTap: () {
-                    Navigator.pop(context);
-                    // Navigator.push(context, MaterialPageRoute(builder: (context) => const HistorialMonitoreoScreen()));
+                    // Cierra el drawer usando la GlobalKey
+                    _scaffoldKey.currentState?.closeDrawer();
+                    // Implementar navegación a Historial de Monitoreo
                   },
                 ),
                 ListTile(
                   title: const Text('Rutas'),
                   onTap: () {
-                    Navigator.pop(context);
-                    // Navigator.push(context, MaterialPageRoute(builder: (context) => const HistorialRutasScreen()));
+                    // Cierra el drawer usando la GlobalKey
+                    _scaffoldKey.currentState?.closeDrawer();
+                    // Implementar navegación a Rutas
                   },
                 ),
                 ListTile(
                   title: const Text('Ubicación'),
                   onTap: () {
-                    Navigator.pop(context);
-                    // Navigator.push(context, MaterialPageRoute(builder: (context) => const HistorialUbicacionScreen()));
+                    // Cierra el drawer usando la GlobalKey
+                    _scaffoldKey.currentState?.closeDrawer();
+                    // Implementar navegación a Ubicación
                   },
                 ),
               ],
             ),
+
+            // Comunicación BLE
             ListTile(
               leading: const Icon(Icons.bluetooth),
               title: const Text('Comunicacion BLE'),
               onTap: () {
+                // Cierra el drawer usando la GlobalKey
+                _scaffoldKey.currentState?.closeDrawer();
                 Get.to(() => ComunicacionBleScreen());
               },
             ),
+
+            // Acerca de
             ListTile(
               leading: const Icon(Icons.info),
               title: const Text('Acerca de'),
               onTap: () {
+                // Cierra el drawer usando la GlobalKey
+                _scaffoldKey.currentState?.closeDrawer();
                 Get.to(() => const AcercaApp());
               },
             ),
+
+            // Cerrar sesión - SOLUCIÓN FINAL CON GLOBALKEY
             ListTile(
               leading: const Icon(Icons.logout),
               title: const Text('Cerrar sesión'),
-              onTap: () {
-                // Llama al método _logout que ahora usa AuthService
-                _logout();
+              onTap: () async {
+                // CIERRA EL DRAWER USANDO LA GLOBALKEY
+                _scaffoldKey.currentState?.closeDrawer();
+
+                // Cerramos la sesión usando AuthService
+                await _authService.signOut();
               },
             ),
           ],

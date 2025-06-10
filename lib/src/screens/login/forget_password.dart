@@ -27,7 +27,9 @@ class _ForgetPasswordState extends State<ForgetPassword> {
   /// Maneja la solicitud de restablecimiento de contraseña
   Future<void> _handleResetPassword() async {
     if (_formKey.currentState!.validate()) {
-      await _authService.resetPasswordForEmail(_emailController.text);
+      // *** ESTA ES LA LÍNEA MODIFICADA (ya estaba correcta) ***
+      await _authService.recoverPassword(
+          _emailController.text.trim()); // Añadido .trim() por buena práctica
       // El AuthService ya muestra un snackbar de éxito o error
       // Puedes añadir navegación de vuelta al login si lo deseas aquí,
       // o dejar que el usuario permanezca en esta pantalla después del envío.
@@ -37,7 +39,6 @@ class _ForgetPasswordState extends State<ForgetPassword> {
 
   @override
   Widget build(BuildContext context) {
-    // Usamos CustomScaffold si quieres el mismo fondo y estructura de SignIn/SignUp
     return CustomScaffold(
       child: Column(
         children: [
@@ -93,8 +94,10 @@ class _ForgetPasswordState extends State<ForgetPassword> {
                         keyboardType: TextInputType.emailAddress,
                       ),
                       const SizedBox(height: 30),
+                      // *** CORRECCIÓN: Eliminada la propiedad .value del Obx ***
                       Obx(
-                        () => _authService.isLoading.value
+                        () => _authService
+                                .isLoading // ¡Aquí está la corrección!
                             ? const CircularProgressIndicator()
                             : SizedBox(
                                 width: double.infinity,
