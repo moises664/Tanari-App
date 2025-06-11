@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:tanari_app/src/controllers/services/auth_service.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
-import 'package:tanari_app/src/screens/login/singin_screen.dart';
-import 'package:tanari_app/src/widgets/custom_scaffold.dart';
+import 'package:tanari_app/src/screens/login/singin_screen.dart'; // Asegúrate de que esta ruta sea correcta
+import 'package:tanari_app/src/widgets/custom_scaffold.dart'; // Asegúrate de que esta ruta sea correcta
 import 'package:get/get.dart'; // Asegúrate de que Get esté importado
 
 class SignUpScreen extends StatefulWidget {
@@ -33,23 +33,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
   /// Maneja el proceso de registro con Supabase
   Future<void> _handleSignUp() async {
     if (_formSignupKey.currentState!.validate() && agreePersonalData) {
-      try {
-        await _authService.signUp(
-          _emailController.text.trim(), // Limpiar espacios
-          _passwordController.text.trim(), // Limpiar espacios
-          _nameController.text
-              .trim(), // Pasamos el nombre como username, limpiar espacios
-        );
-        // Si la llamada a signUp no lanza un error (lo que significa que el Supabase
-        // la aceptó), entonces navegamos al usuario al SignInScreen.
-        // El SnackBar de éxito ("Registro Exitoso...") ya lo maneja el AuthService.
-        Get.offAll(() =>
-            const SignInScreen()); // Navega a la pantalla de inicio de sesión
-      } catch (e) {
-        // AuthService ya muestra el snackbar de error, no necesitamos uno aquí.
-        // El `rethrow` en AuthService asegura que el error se propague aquí
-        // si quisieras manejarlo de forma diferente en la UI.
-      }
+      // El AuthService ya tiene el isLoading y maneja los snackbars.
+      await _authService.signUp(
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
+        _nameController.text.trim(),
+      );
+      // La navegación se maneja dentro del AuthService.
+      // Si el registro fue exitoso y el AuthService redirige, no necesitamos Get.offAll aquí.
+      // Si AuthService NO redirige directamente (ej. espera confirmación de email),
+      // entonces podrías necesitar Get.offAll(() => const SignInScreen()); aquí,
+      // pero como está ahora, el AuthService lo maneja.
     } else if (!agreePersonalData) {
       Get.snackbar(
         "Advertencia",
@@ -102,12 +96,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
               const SizedBox(height: 25.0),
               _buildAgreementRow(),
               const SizedBox(height: 25.0),
-              // *** CORRECCIÓN: Envolver en Obx para que reaccione al estado de carga ***
-              Obx(() => _authService.isLoading // Acceder a .value del RxBool
-                  ? const CircularProgressIndicator() // Muestra un cargando
-                  : _buildSignUpButton()),
+              // Envuelve el botón en Obx para que reaccione al estado de carga
+              Obx(() =>
+                  _authService.isLoading.value // Acceder a .value del RxBool
+                      ? const CircularProgressIndicator() // Muestra un cargando
+                      : _buildSignUpButton()),
               const SizedBox(height: 30.0),
-              const SizedBox(height: 25.0),
+              const SizedBox(
+                  height: 25.0), // Mantengo si eliminas los social logins
               _buildSignInLink(),
               const SizedBox(height: 20.0),
             ],
@@ -179,12 +175,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
       hintStyle: const TextStyle(color: Colors.black26),
       border: _inputBorder(),
       enabledBorder: _inputBorder(),
+      focusedBorder:
+          _inputBorder(color: AppColors.primary), // Añade focusedBorder
     );
   }
 
-  OutlineInputBorder _inputBorder() {
+  OutlineInputBorder _inputBorder({Color color = Colors.black12}) {
     return OutlineInputBorder(
-      borderSide: const BorderSide(color: Colors.black12),
+      borderSide: BorderSide(color: color),
       borderRadius: BorderRadius.circular(10),
     );
   }

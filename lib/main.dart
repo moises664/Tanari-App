@@ -6,14 +6,8 @@ import 'package:tanari_app/src/controllers/bluetooth/ble.controller.dart';
 
 // Importaciones de controladores
 import 'package:tanari_app/src/controllers/services/auth_service.dart';
-
-// Importaciones de pantallas
-import 'package:tanari_app/src/screens/login/welcome_screen.dart';
-import 'package:tanari_app/src/screens/home/home_screen.dart';
-import 'package:tanari_app/src/screens/login/singin_screen.dart';
-import 'package:tanari_app/src/screens/login/signup_screen.dart';
-import 'package:tanari_app/src/screens/login/forget_password.dart';
-import 'package:tanari_app/src/screens/login/splash_screen.dart'; // Importa tu SplashScreen
+import 'package:tanari_app/src/controllers/services/user_profile_service.dart';
+import 'package:tanari_app/src/routes/app_pages.dart'; // las rutas de la aplicación
 
 // Constantes de la aplicación (¡Asegúrate que estas son EXACTAS a las de tu proyecto Supabase!)
 const appTitle = 'TAnaRi';
@@ -45,11 +39,10 @@ void main() async {
     debug: true,
   );
 
-  // Inyecta AuthService en GetX para que esté disponible globalmente.
-  // La lógica de inicialización de sesión se maneja en SplashScreen.
+  // Inyecta AuthService y UserProfileService en GetX para que estén disponibles globalmente.
   Get.put(AuthService());
-
-  Get.put(BleController()); //Nunca quitar el inicializador de Bluetooth
+  Get.put(UserProfileService());
+  Get.put(BleController()); // Nunca quitar el inicializador de Bluetooth
 
   // Ejecuta la aplicación
   runApp(const MyApp());
@@ -66,8 +59,6 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    // Eliminar cualquier lógica de inicialización o navegación que estaba aquí.
-    // Toda la lógica de inicialización y navegación inicial ahora es responsabilidad del SplashScreen.
   }
 
   @override
@@ -79,18 +70,9 @@ class _MyAppState extends State<MyApp> {
         primaryColor: Colors.blue,
         scaffoldBackgroundColor: Colors.white,
       ),
-      initialRoute: '/', // La aplicación siempre comenzará en el SplashScreen
-      getPages: [
-        GetPage(
-            name: '/',
-            page: () =>
-                const SplashScreen()), // Tu pantalla de carga inicial de Flutter
-        GetPage(name: '/welcome', page: () => const WelcomeScreen()),
-        GetPage(name: '/signIn', page: () => const SignInScreen()),
-        GetPage(name: '/home', page: () => const HomeScreen()),
-        GetPage(name: '/signup', page: () => const SignUpScreen()),
-        GetPage(name: '/forgetPassword', page: () => const ForgetPassword()),
-      ],
+      initialRoute:
+          Routes.initial, // La aplicación siempre comenzará en el SplashScreen
+      getPages: AppPages.routes, // <--- ¡USAMOS AppPages.routes AQUÍ!
       builder: (context, child) {
         return MediaQuery(
           data: MediaQuery.of(context).copyWith(

@@ -1,197 +1,236 @@
+// lib/src/controllers/services/auth_service.dart
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:logging/logging.dart';
-import 'package:flutter/material.dart'; // Importar para SnackBar
+import 'package:tanari_app/src/routes/app_pages.dart';
+import 'package:tanari_app/src/controllers/services/user_profile_service.dart';
 
 final _logger = Logger('AuthService');
 
-class AuthService extends GetxController {
+class AuthService extends GetxService {
   final SupabaseClient _supabaseClient = Supabase.instance.client;
-  final _currentUser = Rx<User?>(null); // Observable para el usuario actual
-  final _appInitializationComplete = false.obs;
-  final _isLoading = false.obs;
 
-  User? get currentUser => _currentUser.value;
-  bool get appInitializationComplete => _appInitializationComplete.value;
-  bool get isLoading => _isLoading.value;
+  final Rx<User?> currentUser =
+      Rx<User?>(null); // Rx para el usuario de Supabase
+  final RxBool isLoading =
+      false.obs; // <--- ¡NUEVO! Variable reactiva para el estado de carga
+
+  bool _appInitializationComplete = false;
 
   @override
   void onInit() {
     super.onInit();
-    _logger.info('AuthService: Initializing...');
+    _logger.info('AuthService initialized.');
+    _listenToAuthChanges();
+  }
 
-    _supabaseClient.auth.onAuthStateChange.listen((data) {
-      _logger.info('AuthService: Auth event received: ${data.event}');
-      _onAuthChange(data);
+  void _listenToAuthChanges() {
+    _supabaseClient.auth.onAuthStateChange.listen((data) async {
+      final AuthChangeEvent event = data.event;
+      final Session? session = data.session;
+      _logger.info('AuthChangeEvent: $event, User: ${session?.user?.email}');
+
+      if (event == AuthChangeEvent.signedIn ||
+          event == AuthChangeEvent.initialSession) {
+        currentUser.value = session?.user;
+        if (session?.user?.id != null) {
+          await Get.find<UserProfileService>()
+              .fetchOrCreateUserProfile(session!.user!.id);
+        }
+
+        if (_appInitializationComplete) {
+          Get.offAllNamed(Routes.home); // O Routes.profile según tu preferencia
+          _logger.info('AuthService: Navigating to home after sign-in event.');
+        }
+      } else if (event == AuthChangeEvent.signedOut) {
+        currentUser.value = null;
+        Get.find<UserProfileService>().clearUserProfile();
+        Get.offAllNamed(Routes.signIn);
+        _logger
+            .info('AuthService: Navigating to sign-in after sign-out event.');
+      } else if (event == AuthChangeEvent.userUpdated) {
+        currentUser.value = session?.user;
+        _logger.info('AuthService: User profile updated event.');
+        if (session?.user?.id != null) {
+          await Get.find<UserProfileService>()
+              .fetchOrCreateUserProfile(session!.user!.id);
+        }
+      }
     });
   }
 
-  void setAppInitializationComplete(bool status) {
-    _appInitializationComplete.value = status;
-    _logger.info(
-        'AuthService: Application initialization marked as ${status ? "complete" : "incomplete"}.');
-  }
-
-  void _onAuthChange(AuthState data) {
-    _logger.info(
-        'AuthService: Auth event: ${data.event}, User: ${data.session?.user?.email ?? 'N/A'}');
-    final AuthChangeEvent event = data.event;
-    final Session? session = data.session;
-
-    _currentUser.value = session?.user;
-
-    if (_appInitializationComplete.value &&
-        event != AuthChangeEvent.initialSession) {
-      switch (event) {
-        case AuthChangeEvent.signedIn:
-          Get.offAllNamed('/home');
-          Get.snackbar('Bienvenido',
-              'Has iniciado sesión como ${_currentUser.value?.email}',
-              snackPosition: SnackPosition.BOTTOM,
-              backgroundColor: Colors.green,
-              colorText: Colors.white);
-          break;
-        case AuthChangeEvent.signedOut:
-          // *** CAMBIO CRÍTICO AQUÍ: Mostrar SnackBar ANTES de la navegación offAllNamed ***
-          Get.snackbar('Adiós', 'Has cerrado sesión',
-              snackPosition: SnackPosition.BOTTOM,
-              backgroundColor: Colors.orange,
-              colorText: Colors.white);
-          // Opcional: Pequeño retraso para que el SnackBar tenga tiempo de montarse.
-          // await Future.delayed(const Duration(milliseconds: 100));
-          Get.offAllNamed('/welcome');
-          break;
-        case AuthChangeEvent.passwordRecovery:
-        case AuthChangeEvent.userUpdated:
-        case AuthChangeEvent.tokenRefreshed:
-        case AuthChangeEvent.mfaChallengeVerified:
-          _logger.info(
-              'AuthService: Evento de autenticación (${event.name}) manejado, no se requiere navegación global aquí.');
-          break;
-        case AuthChangeEvent.initialSession:
-          _logger.warning(
-              'AuthService: AuthChangeEvent.initialSession recibido, pero la navegación inicial es responsabilidad de SplashScreen.');
-          break;
-      }
+  void setAppInitializationComplete() {
+    _appInitializationComplete = true;
+    if (currentUser.value != null) {
+      Get.offAllNamed(Routes.home); // O Routes.profile
     } else {
-      _logger.warning(
-          'AuthService: Evento (${event.name}) recibido. La navegación está en espera porque la inicialización de la app no está completa o es un initialSession.');
+      Get.offAllNamed(Routes.welcome);
     }
   }
 
-  // --- Tus métodos de autenticación (signIn, signUp, signOut, recoverPassword) ---
-  // No hay cambios en estos métodos ya que se manejan correctamente con _isLoading.
-
-  Future<void> signInWithEmailAndPassword(String email, String password) async {
-    _isLoading.value = true;
+  Future<void> signIn(String email, String password) async {
+    isLoading.value = true; // <--- Inicia la carga
     try {
+      _logger.info('Attempting sign-in for email: $email');
       final AuthResponse response =
           await _supabaseClient.auth.signInWithPassword(
         email: email,
         password: password,
       );
-      _logger
-          .info('AuthService: Sign-in successful for ${response.user?.email}');
+      final User? user = response.user;
+
+      if (user != null) {
+        Get.snackbar(
+          'Inicio de Sesión Exitoso',
+          '¡Bienvenido de nuevo!',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+        );
+      } else {
+        Get.snackbar(
+          'Error de Inicio de Sesión',
+          'Credenciales inválidas o usuario no encontrado.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+      }
     } on AuthException catch (e) {
-      _logger.warning('AuthService: Sign-in error: ${e.message}');
-      Get.snackbar('Error de inicio de sesión', e.message,
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red,
-          colorText: Colors.white);
-      rethrow;
-    } catch (e) {
-      _logger.severe('AuthService: Unexpected sign-in error: $e');
+      _logger.severe('AuthException during sign-in: ${e.message}', e);
       Get.snackbar(
-          'Error inesperado', 'Ocurrió un error inesperado al iniciar sesión',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red,
-          colorText: Colors.white);
-      rethrow;
+        'Error de Autenticación',
+        e.message,
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } catch (e, s) {
+      _logger.severe('Unexpected error during sign-in: $e', e, s);
+      Get.snackbar(
+        'Error Inesperado',
+        'Algo salió mal durante el inicio de sesión. Intenta de nuevo.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     } finally {
-      _isLoading.value = false;
+      isLoading.value = false; // <--- Finaliza la carga
     }
   }
 
   Future<void> signUp(String email, String password, String username) async {
-    _isLoading.value = true;
+    isLoading.value = true; // <--- Inicia la carga
     try {
+      _logger.info('Attempting sign-up for email: $email');
       final AuthResponse response = await _supabaseClient.auth.signUp(
         email: email,
         password: password,
         data: {'username': username},
       );
-      _logger
-          .info('AuthService: Sign-up successful for ${response.user?.email}');
-      Get.snackbar('Registro Exitoso',
-          'Por favor, verifica tu correo electrónico para confirmar tu cuenta.',
+      final User? user = response.user;
+
+      if (user != null) {
+        Get.snackbar(
+          'Registro Exitoso',
+          '¡Bienvenido! Por favor, verifica tu correo electrónico si es necesario.',
           snackPosition: SnackPosition.BOTTOM,
           backgroundColor: Colors.green,
-          colorText: Colors.white);
+          colorText: Colors.white,
+        );
+      } else {
+        Get.snackbar(
+          'Error de Registro',
+          'No se pudo completar el registro. Intenta de nuevo.',
+          snackPosition: SnackPosition.BOTTOM,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+        );
+      }
     } on AuthException catch (e) {
-      _logger.warning('AuthService: Sign-up error: ${e.message}');
-      Get.snackbar('Error de registro', e.message,
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red,
-          colorText: Colors.white);
-      rethrow;
-    } catch (e) {
-      _logger.severe('AuthService: Unexpected sign-up error: $e');
+      _logger.severe('AuthException during sign-up: ${e.message}', e);
       Get.snackbar(
-          'Error inesperado', 'Ocurrió un error inesperado al registrarse',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red,
-          colorText: Colors.white);
-      rethrow;
+        'Error de Registro',
+        e.message,
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } catch (e, s) {
+      _logger.severe('Unexpected error during sign-up: $e', e, s);
+      Get.snackbar(
+        'Error Inesperado',
+        'Algo salió mal durante el registro. Intenta de nuevo.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     } finally {
-      _isLoading.value = false;
+      isLoading.value = false; // <--- Finaliza la carga
     }
   }
 
   Future<void> signOut() async {
-    _isLoading.value = true;
+    isLoading.value = true; // <--- Inicia la carga
     try {
+      _logger.info('Attempting sign-out.');
       await _supabaseClient.auth.signOut();
-      _logger.info('AuthService: User signed out.');
-      // La navegación y el snackbar se manejan en _onAuthChange a través del evento signedOut.
-    } catch (e) {
-      _logger.severe('AuthService: Error signing out: $e');
-      Get.snackbar('Error al cerrar sesión',
-          'No se pudo cerrar sesión. Intenta de nuevo.',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red,
-          colorText: Colors.white);
+    } on AuthException catch (e) {
+      _logger.severe('AuthException during sign-out: ${e.message}', e);
+      Get.snackbar(
+        'Error de Sesión',
+        e.message,
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } catch (e, s) {
+      _logger.severe('Unexpected error during sign-out: $e', e, s);
+      Get.snackbar(
+        'Error Inesperado',
+        'No se pudo cerrar sesión. Intenta de nuevo.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     } finally {
-      _isLoading.value = false;
+      isLoading.value = false; // <--- Finaliza la carga
     }
   }
 
-  Future<void> recoverPassword(String email) async {
-    _isLoading.value = true;
+  Future<void> sendPasswordRecoveryEmail(String email) async {
+    isLoading.value = true; // <--- Inicia la carga
     try {
+      _logger.info('Sending password recovery email to: $email');
       await _supabaseClient.auth.resetPasswordForEmail(email);
-      Get.snackbar('Correo Enviado',
-          'Se ha enviado un correo electrónico con instrucciones para restablecer tu contraseña.',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.green,
-          colorText: Colors.white);
-      _logger.info('AuthService: Password recovery email sent to $email');
+      Get.snackbar(
+        'Correo Enviado',
+        'Se ha enviado un correo de recuperación de contraseña a $email. Por favor, revisa tu bandeja de entrada.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
     } on AuthException catch (e) {
-      _logger.warning('AuthService: Password recovery error: ${e.message}');
-      Get.snackbar('Error', e.message,
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red,
-          colorText: Colors.white);
-      rethrow;
-    } catch (e) {
-      _logger.severe('AuthService: Unexpected password recovery error: $e');
-      Get.snackbar('Error inesperado',
-          'Ocurrió un error al intentar recuperar la contraseña',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: Colors.red,
-          colorText: Colors.white);
-      rethrow;
+      _logger.severe('AuthException during password recovery: ${e.message}', e);
+      Get.snackbar(
+        'Error de Recuperación',
+        e.message,
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } catch (e, s) {
+      _logger.severe('Unexpected error during password recovery: $e', e, s);
+      Get.snackbar(
+        'Error Inesperado',
+        'No se pudo enviar el correo de recuperación. Intenta de nuevo.',
+        snackPosition: SnackPosition.BOTTOM,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     } finally {
-      _isLoading.value = false;
+      isLoading.value = false; // <--- Finaliza la carga
     }
   }
 }

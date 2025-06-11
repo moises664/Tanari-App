@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:tanari_app/src/controllers/services/auth_service.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
-import 'package:tanari_app/src/widgets/custom_scaffold.dart'; // Mantén si lo usas o elimina si no
+import 'package:tanari_app/src/widgets/custom_scaffold.dart'; // Asegúrate de que esta ruta sea correcta
+import 'package:get/get.dart'; // Asegúrate de que Get esté importado
 
 class ForgetPassword extends StatefulWidget {
   const ForgetPassword({super.key});
@@ -27,9 +27,9 @@ class _ForgetPasswordState extends State<ForgetPassword> {
   /// Maneja la solicitud de restablecimiento de contraseña
   Future<void> _handleResetPassword() async {
     if (_formKey.currentState!.validate()) {
-      // *** ESTA ES LA LÍNEA MODIFICADA (ya estaba correcta) ***
-      await _authService.recoverPassword(
-          _emailController.text.trim()); // Añadido .trim() por buena práctica
+      // *** CORRECCIÓN: Usar el nombre del método correcto y .trim() ***
+      await _authService.sendPasswordRecoveryEmail(_emailController.text
+          .trim()); // El método es sendPasswordRecoveryEmail
       // El AuthService ya muestra un snackbar de éxito o error
       // Puedes añadir navegación de vuelta al login si lo deseas aquí,
       // o dejar que el usuario permanezca en esta pantalla después del envío.
@@ -94,10 +94,10 @@ class _ForgetPasswordState extends State<ForgetPassword> {
                         keyboardType: TextInputType.emailAddress,
                       ),
                       const SizedBox(height: 30),
-                      // *** CORRECCIÓN: Eliminada la propiedad .value del Obx ***
+                      // *** CORRECCIÓN: Envuelve en Obx y accede a .value ***
                       Obx(
                         () => _authService
-                                .isLoading // ¡Aquí está la corrección!
+                                .isLoading.value // ¡Aquí está la corrección!
                             ? const CircularProgressIndicator()
                             : SizedBox(
                                 width: double.infinity,
@@ -166,7 +166,7 @@ class _ForgetPasswordState extends State<ForgetPassword> {
             'Inicia sesión',
             style: TextStyle(
               fontWeight: FontWeight.bold,
-              color: AppColors.secondary,
+              color: AppColors.primary,
             ),
           ),
         ),

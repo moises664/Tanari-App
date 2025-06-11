@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tanari_app/src/controllers/services/auth_service.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
-import 'package:tanari_app/src/screens/login/signup_screen.dart';
-import 'package:tanari_app/src/screens/login/forget_password.dart';
-import 'package:tanari_app/src/widgets/custom_scaffold.dart';
-import 'package:get/get.dart';
+import 'package:tanari_app/src/screens/login/signup_screen.dart'; // Mantén si lo usas
+import 'package:tanari_app/src/screens/login/forget_password.dart'; // Mantén si lo usas
+import 'package:tanari_app/src/widgets/custom_scaffold.dart'; // Asegúrate de que esta ruta sea correcta
+import 'package:get/get.dart'; // Para Get.find y Obx
 
 /// Pantalla de inicio de sesión que maneja autenticación con Supabase
 class SignInScreen extends StatefulWidget {
@@ -69,12 +69,12 @@ class _SignInScreenState extends State<SignInScreen> {
       // Guardar preferencias de "Recordarme"
       await _saveCredentials();
 
-      // *** CORRECCIÓN CRÍTICA AQUÍ: Cambiado de signUp a signInWithEmailAndPassword ***
-      await _authService.signInWithEmailAndPassword(
-        _emailController.text.trim(), // Es buena práctica limpiar los espacios
+      // Llama al método signIn del AuthService
+      await _authService.signIn(
+        _emailController.text.trim(),
         _passwordController.text.trim(),
       );
-      // La navegación a HomeScreen se manejará automáticamente en main.dart
+      // La navegación a HomeScreen se manejará automáticamente en AuthService
       // gracias al listener de authService.currentUser y el _onAuthChange en AuthService.
     }
   }
@@ -120,7 +120,8 @@ class _SignInScreenState extends State<SignInScreen> {
               _buildRememberForgotRow(),
               const SizedBox(height: 25.0),
               // Envuelve el botón en Obx para reaccionar al estado de carga del AuthService
-              Obx(() => _authService.isLoading
+              Obx(() => _authService
+                      .isLoading.value // <--- Accede al valor con .value
                   ? const CircularProgressIndicator() // Muestra un cargando
                   : _buildLoginButton()),
               const SizedBox(height: 25.0),
@@ -154,7 +155,6 @@ class _SignInScreenState extends State<SignInScreen> {
       validator: (value) {
         if (value == null || value.isEmpty) return 'Campo obligatorio';
         if (!GetUtils.isEmail(value)) {
-          // Usamos el validador de email de GetX
           return 'Email inválido';
         }
         return null;
@@ -165,6 +165,8 @@ class _SignInScreenState extends State<SignInScreen> {
         hintStyle: const TextStyle(color: Colors.black26),
         border: _inputBorder(),
         enabledBorder: _inputBorder(),
+        focusedBorder:
+            _inputBorder(color: AppColors.primary), // Añade focusedBorder
       ),
     );
   }
@@ -186,14 +188,16 @@ class _SignInScreenState extends State<SignInScreen> {
         hintStyle: const TextStyle(color: Colors.black26),
         border: _inputBorder(),
         enabledBorder: _inputBorder(),
+        focusedBorder:
+            _inputBorder(color: AppColors.primary), // Añade focusedBorder
       ),
     );
   }
 
   /// Estilo común para los bordes de los inputs
-  OutlineInputBorder _inputBorder() {
+  OutlineInputBorder _inputBorder({Color color = Colors.black12}) {
     return OutlineInputBorder(
-      borderSide: const BorderSide(color: Colors.black12),
+      borderSide: BorderSide(color: color), // Usar color en el borde
       borderRadius: BorderRadius.circular(10),
     );
   }

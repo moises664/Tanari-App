@@ -1,16 +1,17 @@
+// lib/src/screens/home/home_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:tanari_app/src/controllers/services/auth_service.dart';
+import 'package:tanari_app/src/controllers/services/user_profile_service.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
 import 'package:tanari_app/src/screens/home/home_tab.dart';
-import 'package:tanari_app/src/screens/menu/acerca_app.dart';
-import 'package:tanari_app/src/screens/menu/comunicacion_ble.dart';
+import 'package:tanari_app/src/routes/app_pages.dart';
+import 'package:get/get.dart';
 import 'package:tanari_app/src/screens/menu/historial_app.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_monitoreo.dart';
-import 'package:tanari_app/src/screens/menu/modos_operacion/modo_acople.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_ugv.dart';
 import 'package:tanari_app/src/screens/menu/profile_user.dart';
-import 'package:get/get.dart';
 
 /// Pantalla principal de la aplicación después del login.
 /// Muestra un menú lateral (Drawer) y una barra de navegación inferior personalizada.
@@ -22,8 +23,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Obtener la instancia del AuthService usando GetX
+  // Obtener la instancia del AuthService y UserProfileService usando GetX
   final AuthService _authService = Get.find<AuthService>();
+  final UserProfileService _userProfileService = Get.find<UserProfileService>();
 
   // DECLARACIÓN DE LA GLOBALKEY PARA EL SCAFFOLD
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -37,7 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const ModoMonitoreo(),
     const ModoUgv(),
     const HistorialApp(),
-    const ProfileUser(),
+    const ProfileUser() // La pantalla de perfil
   ];
 
   /// Maneja el cambio de pestaña en la barra de navegación inferior
@@ -49,14 +51,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Utilizamos PopScope para interceptar el botón de regresar del dispositivo
     return PopScope(
-      canPop: false, // Impide que el botón de regresar haga pop por defecto
-      onPopInvoked: (didPop) {
-        if (didPop) return;
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) {
+          return;
+        }
 
-        // Muestra diálogo de confirmación al intentar salir
-        showDialog(
+        final bool? shouldExit = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('Salir de la aplicación'),
@@ -69,8 +71,6 @@ class _HomeScreenState extends State<HomeScreen> {
               TextButton(
                 onPressed: () {
                   Navigator.of(context).pop(true);
-                  // Para cerrar completamente la app:
-                  // SystemNavigator.pop();
                 },
                 child: const Text('Sí'),
               ),
@@ -79,7 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
       child: Scaffold(
-        key: _scaffoldKey, // ASIGNAR LA GLOBALKEY AL SCAFFOLD
+        key: _scaffoldKey,
         appBar: AppBar(
           title: Container(
             padding: const EdgeInsets.all(15),
@@ -100,11 +100,10 @@ class _HomeScreenState extends State<HomeScreen> {
           foregroundColor: AppColors.textPrimary,
           automaticallyImplyLeading: true,
         ),
-        drawer: _buildMenuDrawer(context), // Menú lateral
-        bottomNavigationBar:
-            _buildCustomBottomNavigationBar(context), // Barra inferior
+        drawer: _buildMenuDrawer(context),
+        bottomNavigationBar: _buildCustomBottomNavigationBar(context),
         backgroundColor: Colors.white,
-        body: _widgetOptions.elementAt(_selectedIndex), // Contenido principal
+        body: _widgetOptions.elementAt(_selectedIndex),
       ),
     );
   }
@@ -136,7 +135,7 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildNavItem(1, Icons.phone_android, 'Dispositivo'),
               _buildNavItem(2, Icons.car_crash, 'UGV'),
               _buildNavItem(3, EvaIcons.book, 'Historial'),
-              _buildNavItem(4, LineAwesome.user_solid, 'Usuario'),
+              _buildNavItem(4, Icons.person, 'Perfil'),
             ],
           ),
         ),
@@ -150,8 +149,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return GestureDetector(
       onTap: () => _onItemTapped(index),
       child: SizedBox(
-        width:
-            MediaQuery.of(context).size.width / 5 - (24 * 2 / 5) - (10 * 2 / 5),
+        width: MediaQuery.of(context).size.width / _widgetOptions.length -
+            (24 * 2 / _widgetOptions.length) -
+            (10 * 2 / _widgetOptions.length),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -184,16 +184,29 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             // Cabecera con información del usuario
             Obx(() {
-              final user =
-                  _authService.currentUser; // <-- CORRECCIÓN FINAL AQUÍ
+              final user = _authService.currentUser.value;
+              final userProfile = _userProfileService.currentUserProfile.value;
+
+              // Acceso a las propiedades del objeto UserProfile
+              final String username = userProfile?.username ??
+                  user?.userMetadata?['username'] as String? ??
+                  'Usuario Tanari';
+              final String email =
+                  userProfile?.email ?? user?.email ?? 'correo@ejemplo.com';
+              final String? avatarUrl = userProfile?.avatarUrl;
+
               return UserAccountsDrawerHeader(
                 decoration: const BoxDecoration(color: Colors.blueGrey),
-                accountName:
-                    Text(user?.userMetadata?['username'] ?? 'Usuario Tanari'),
-                accountEmail: Text(user?.email ?? 'correo@ejemplo.com'),
-                currentAccountPicture: const CircleAvatar(
+                accountName: Text(username),
+                accountEmail: Text(email),
+                currentAccountPicture: CircleAvatar(
                   backgroundColor: Colors.blueAccent,
-                  child: Icon(Icons.person, size: 40, color: Colors.white),
+                  backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
+                      ? NetworkImage(avatarUrl) as ImageProvider
+                      : null,
+                  child: (avatarUrl == null || avatarUrl.isEmpty)
+                      ? const Icon(Icons.person, size: 40, color: Colors.white)
+                      : null,
                 ),
               );
             }),
@@ -206,25 +219,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 ListTile(
                   title: const Text('Tanari DP'),
                   onTap: () {
-                    // Cierra el drawer usando la GlobalKey
                     _scaffoldKey.currentState?.closeDrawer();
-                    Get.to(() => const ModoMonitoreo());
+                    Get.toNamed(Routes.modoMonitoreo);
                   },
                 ),
                 ListTile(
                   title: const Text('Tanari UGV'),
                   onTap: () {
-                    // Cierra el drawer usando la GlobalKey
                     _scaffoldKey.currentState?.closeDrawer();
-                    Get.to(() => const ModoUgv());
+                    Get.toNamed(Routes.modoUgv);
                   },
                 ),
                 ListTile(
                   title: const Text('Acople'),
                   onTap: () {
-                    // Cierra el drawer usando la GlobalKey
                     _scaffoldKey.currentState?.closeDrawer();
-                    Get.to(() => const ModoAcople());
+                    Get.toNamed(Routes.modoAcople);
                   },
                 ),
               ],
@@ -238,25 +248,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 ListTile(
                   title: const Text('Historial de Monitoreo'),
                   onTap: () {
-                    // Cierra el drawer usando la GlobalKey
                     _scaffoldKey.currentState?.closeDrawer();
-                    // Implementar navegación a Historial de Monitoreo
+                    Get.toNamed(Routes.historialApp);
                   },
                 ),
                 ListTile(
                   title: const Text('Rutas'),
                   onTap: () {
-                    // Cierra el drawer usando la GlobalKey
                     _scaffoldKey.currentState?.closeDrawer();
-                    // Implementar navegación a Rutas
+                    // Define una ruta para esto en app_pages.dart si no existe
+                    // Get.toNamed(Routes.rutas); // Ejemplo
                   },
                 ),
                 ListTile(
                   title: const Text('Ubicación'),
                   onTap: () {
-                    // Cierra el drawer usando la GlobalKey
                     _scaffoldKey.currentState?.closeDrawer();
-                    // Implementar navegación a Ubicación
+                    // Define una ruta para esto en app_pages.dart si no existe
+                    // Get.toNamed(Routes.ubicacion); // Ejemplo
                   },
                 ),
               ],
@@ -267,9 +276,8 @@ class _HomeScreenState extends State<HomeScreen> {
               leading: const Icon(Icons.bluetooth),
               title: const Text('Comunicacion BLE'),
               onTap: () {
-                // Cierra el drawer usando la GlobalKey
                 _scaffoldKey.currentState?.closeDrawer();
-                Get.to(() => ComunicacionBleScreen());
+                Get.toNamed(Routes.comunicacionBle);
               },
             ),
 
@@ -278,22 +286,30 @@ class _HomeScreenState extends State<HomeScreen> {
               leading: const Icon(Icons.info),
               title: const Text('Acerca de'),
               onTap: () {
-                // Cierra el drawer usando la GlobalKey
                 _scaffoldKey.currentState?.closeDrawer();
-                Get.to(() => const AcercaApp());
+                Get.toNamed(Routes.acercaApp);
               },
             ),
 
-            // Cerrar sesión - SOLUCIÓN FINAL CON GLOBALKEY
+            // Mi Perfil (Navegar a la pantalla de perfil)
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('Mi Perfil'),
+              onTap: () {
+                _scaffoldKey.currentState?.closeDrawer();
+                Get.toNamed(Routes
+                    .profile); // Navega a la pantalla de perfil por su nombre
+              },
+            ),
+
+            // Cerrar sesión
             ListTile(
               leading: const Icon(Icons.logout),
               title: const Text('Cerrar sesión'),
               onTap: () async {
-                // CIERRA EL DRAWER USANDO LA GLOBALKEY
                 _scaffoldKey.currentState?.closeDrawer();
-
-                // Cerramos la sesión usando AuthService
-                await _authService.signOut();
+                await _authService
+                    .signOut(); // AuthService se encarga de la redirección
               },
             ),
           ],
