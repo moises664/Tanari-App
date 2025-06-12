@@ -24,6 +24,9 @@ dependencies:
   logging: ^1.3.0 # Registro de eventos y errores
   collection: ^1.19.1 # Utilidades de colecciones
   supabase_flutter: ^2.9.0  # Supabase para autenticacion y almacenamiento de datos
+  image_picker: ^1.1.2 # Seleccion de imagenes desde la galeria o camara
+  image_cropper: ^9.1.0 # Recorte de imagenes
+
 
 
 dev_dependencies:

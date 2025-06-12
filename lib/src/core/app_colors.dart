@@ -1,53 +1,55 @@
-import 'dart:ui';
+import 'dart:ui'; // Importar para usar la clase Color
 
-/// Clase que define los colores principales de la aplicación.
-/// Incluye colores primarios, secundarios, de fondo y para texto.
+/// Clase que define la paleta de colores principal para la aplicación.
+/// Centraliza la definición de colores para asegurar coherencia en el diseño
+/// y facilitar futuros cambios de tema.
 class AppColors {
-  /// Color primario utilizado en la identidad visual principal de la app.
-  static const Color primary = Color(0xFFBFF205); // Verde lima brillante
+  // *******************
+  // ** Colores Primarios y de Acento **
+  // *******************
 
-  /// Color secundario complementario al primario.
-  static const Color secondary = Color(0xFFD7F205); // Amarillo verdoso claro
+  /// Color primario de la marca. Un verde lima brillante, ideal para elementos interactivos y destacados.
+  static const Color primary = Color(0xFFBFF205);
 
-  /// Otra variante de color secundario para elementos adicionales.
-  static const Color secondary1 = Color(0xFF7D8C0B); // Verde oliva oscuro
+  /// Color secundario que complementa al primario. Un amarillo verdoso claro.
+  static const Color secondary = Color(0xFFD7F205);
 
-  /// Color de acento para elementos destacados.
-  static const Color accent = Color(0xFF040240); // Azul profundo
+  /// Otra variante de color secundario, un verde oliva oscuro. Útil para fondos sutiles o elementos menos prominentes.
+  static const Color secondary1 = Color(0xFF7D8C0B);
 
-  /// **NUEVO: Color de acento específico para estados activos o resaltados.**
-  /// Este color se utilizará para indicar un estado "activo" o "presionado"
-  /// en botones o elementos interactivos, como el modo automático.
+  /// Color de acento principal. Un azul profundo, ideal para headers o elementos importantes que necesiten contraste.
+  static const Color accent = Color(0xFF040240);
+
+  /// Color de acento específico para indicar estados activos, resaltados o éxito. Un verde vibrante.
   static const Color accentColor =
       Color(0xFF4CAF50); // Un verde vibrante para estados activos
 
   // *******************
-  // ** Backgrounds **
+  // ** Colores de Fondo **
   // *******************
 
-  /// Color de fondo principal utilizado en la mayoría de las pantallas.
-  static const Color backgroundPrimary = Color(0xFFF5F5F5); // Gris claro
+  /// Color de fondo principal para la mayoría de las pantallas. Un gris muy claro que proporciona una base limpia.
+  static const Color backgroundPrimary = Color(0xFFF5F5F5);
 
-  static const Color backgroundWhite = Color(0xFFFFFFFF); // Blanco
-  static const Color backgroundSecondary = Color(0xff707266); // Gris muy claro
+  /// Color blanco puro, ideal para elementos que requieran máxima claridad o contraste.
+  static const Color backgroundWhite = Color(0xFFFFFFFF);
 
-  /// **NUEVO: Color de fondo claro para paneles o tarjetas.**
-  /// Ideal para usar en contenedores como los paneles de datos o control,
-  /// que necesitan diferenciarse ligeramente del fondo principal, pero
-  /// manteniendo una estética clara y limpia.
-  static const Color backgroundLight =
-      Color(0xFFE0E0E0); // Gris claro más oscuro que backgroundPrimary
+  /// Color de fondo secundario. Un gris medio, puede usarse para secciones o tarjetas con un contraste sutil.
+  static const Color backgroundSecondary = Color(0xff707266);
 
-  /// Color de fondo secundario para secciones oscuras.
-  static const Color backgroundBlack = Color(0xFF0D0D0D); // Negro intenso
+  /// Color de fondo claro para paneles, tarjetas o contenedores que necesiten diferenciarse del fondo principal.
+  static const Color backgroundLight = Color(0xFFE0E0E0);
+
+  /// Color negro intenso, ideal para headers oscuros, textos en fondos claros o elementos con alto contraste.
+  static const Color backgroundBlack = Color(0xFF0D0D0D);
 
   // *******************
-  // ** Text Styles **
+  // ** Colores de Texto **
   // *******************
 
-  /// Color principal para textos (títulos, párrafos importantes).
-  static const Color textPrimary = Color(0xFF212121); // Gris oscuro
+  /// Color principal para textos (títulos, párrafos importantes) en fondos claros. Un gris oscuro.
+  static const Color textPrimary = Color(0xFF212121);
 
-  /// Color secundario para textos menos importantes o complementarios.
-  static const Color textSecondary = Color(0xFF757575); // Gris medio
+  /// Color secundario para textos menos importantes o complementarios. Un gris medio.
+  static const Color textSecondary = Color(0xFF757575);
 }

@@ -7,7 +7,7 @@ import 'package:tanari_app/src/screens/login/singin_screen.dart';
 import 'package:tanari_app/src/screens/login/signup_screen.dart';
 import 'package:tanari_app/src/screens/login/forget_password.dart';
 import 'package:tanari_app/src/screens/login/splash_screen.dart';
-import 'package:tanari_app/src/screens/menu/profile_user.dart'; // Importa la pantalla de perfil
+import 'package:tanari_app/src/screens/menu/profile_user_screen.dart'; // Importa la pantalla de perfil
 import 'package:tanari_app/src/screens/menu/acerca_app.dart'; // Importa tus otras pantallas para rutas
 import 'package:tanari_app/src/screens/menu/comunicacion_ble.dart';
 import 'package:tanari_app/src/screens/menu/historial_app.dart';
@@ -43,7 +43,7 @@ class AppPages {
     GetPage(name: Routes.forgetPassword, page: () => const ForgetPassword()),
     GetPage(
         name: Routes.profile,
-        page: () => const ProfileUser()), // Define la ruta del perfil
+        page: () => ProfileUserScreen()), // Define la ruta del perfil
     GetPage(name: Routes.acercaApp, page: () => const AcercaApp()),
     GetPage(name: Routes.comunicacionBle, page: () => ComunicacionBleScreen()),
     GetPage(name: Routes.historialApp, page: () => const HistorialApp()),

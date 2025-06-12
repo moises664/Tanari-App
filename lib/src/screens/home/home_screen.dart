@@ -1,5 +1,3 @@
-// lib/src/screens/home/home_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:tanari_app/src/controllers/services/auth_service.dart';
@@ -11,7 +9,7 @@ import 'package:get/get.dart';
 import 'package:tanari_app/src/screens/menu/historial_app.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_monitoreo.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_ugv.dart';
-import 'package:tanari_app/src/screens/menu/profile_user.dart';
+import 'package:tanari_app/src/screens/menu/profile_user_screen.dart';
 
 /// Pantalla principal de la aplicación después del login.
 /// Muestra un menú lateral (Drawer) y una barra de navegación inferior personalizada.
@@ -39,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const ModoMonitoreo(),
     const ModoUgv(),
     const HistorialApp(),
-    const ProfileUser() // La pantalla de perfil
+    ProfileUserScreen() // La pantalla de perfil
   ];
 
   /// Maneja el cambio de pestaña en la barra de navegación inferior
@@ -181,57 +179,93 @@ class _HomeScreenState extends State<HomeScreen> {
   Drawer _buildMenuDrawer(BuildContext context) => Drawer(
         backgroundColor: Colors.white,
         child: ListView(
+          padding: EdgeInsets
+              .zero, // Elimina el padding por defecto para que UserAccountsDrawerHeader ocupe todo el ancho.
           children: [
-            // Cabecera con información del usuario
-            Obx(() {
-              final user = _authService.currentUser.value;
-              final userProfile = _userProfileService.currentUserProfile.value;
+            // Cabecera con información del usuario (ahora un botón)
+            InkWell(
+              // Envuelve UserAccountsDrawerHeader con InkWell para hacerlo tappable
+              onTap: () {
+                _scaffoldKey.currentState?.closeDrawer(); // Cierra el drawer
+                Get.toNamed(Routes.profile); // Navega a la pantalla de perfil
+              },
+              child: Obx(() {
+                final user = _authService.currentUser.value;
+                final userProfile =
+                    _userProfileService.currentUserProfile.value;
 
-              // Acceso a las propiedades del objeto UserProfile
-              final String username = userProfile?.username ??
-                  user?.userMetadata?['username'] as String? ??
-                  'Usuario Tanari';
-              final String email =
-                  userProfile?.email ?? user?.email ?? 'correo@ejemplo.com';
-              final String? avatarUrl = userProfile?.avatarUrl;
+                // Acceso a las propiedades del objeto UserProfile
+                final String username = userProfile?.username ??
+                    user?.userMetadata?['username'] as String? ??
+                    'Usuario Tanari';
+                final String email =
+                    userProfile?.email ?? user?.email ?? 'correo@ejemplo.com';
+                final String? avatarUrl = userProfile?.avatarUrl;
 
-              return UserAccountsDrawerHeader(
-                decoration: const BoxDecoration(color: Colors.blueGrey),
-                accountName: Text(username),
-                accountEmail: Text(email),
-                currentAccountPicture: CircleAvatar(
-                  backgroundColor: Colors.blueAccent,
-                  backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
-                      ? NetworkImage(avatarUrl) as ImageProvider
-                      : null,
-                  child: (avatarUrl == null || avatarUrl.isEmpty)
-                      ? const Icon(Icons.person, size: 40, color: Colors.white)
-                      : null,
-                ),
-              );
-            }),
+                return UserAccountsDrawerHeader(
+                  decoration: const BoxDecoration(
+                    color: AppColors
+                        .accent, // Usando el color accent para la cabecera
+                  ),
+                  accountName: Text(
+                    username,
+                    style: const TextStyle(
+                      color: AppColors
+                          .backgroundWhite, // Texto blanco para el nombre
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  accountEmail: Text(
+                    email,
+                    style: TextStyle(
+                      color: AppColors.backgroundWhite.withOpacity(
+                          0.8), // Texto blanco semi-transparente para el email
+                    ),
+                  ),
+                  currentAccountPicture: CircleAvatar(
+                    backgroundColor:
+                        AppColors.primary, // Fondo del avatar (verde lima)
+                    backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
+                        ? NetworkImage(avatarUrl) as ImageProvider
+                        : null,
+                    child: (avatarUrl == null || avatarUrl.isEmpty)
+                        ? const Icon(Icons.person,
+                            size: 40,
+                            color: AppColors
+                                .textPrimary) // Ícono de persona con color de texto primario
+                        : null,
+                  ),
+                );
+              }),
+            ),
 
             // Sección de Modos de Operación
             ExpansionTile(
-              leading: const Icon(Icons.car_rental),
-              title: const Text('Modos de Operacion'),
+              leading: const Icon(Icons.car_rental,
+                  color: AppColors.textPrimary), // Color del icono
+              title: const Text('Modos de Operacion',
+                  style: TextStyle(
+                      color: AppColors.textPrimary)), // Color del texto
               children: <Widget>[
                 ListTile(
-                  title: const Text('Tanari DP'),
+                  title: const Text('Tanari DP',
+                      style: TextStyle(color: AppColors.textPrimary)),
                   onTap: () {
                     _scaffoldKey.currentState?.closeDrawer();
                     Get.toNamed(Routes.modoMonitoreo);
                   },
                 ),
                 ListTile(
-                  title: const Text('Tanari UGV'),
+                  title: const Text('Tanari UGV',
+                      style: TextStyle(color: AppColors.textPrimary)),
                   onTap: () {
                     _scaffoldKey.currentState?.closeDrawer();
                     Get.toNamed(Routes.modoUgv);
                   },
                 ),
                 ListTile(
-                  title: const Text('Acople'),
+                  title: const Text('Acople',
+                      style: TextStyle(color: AppColors.textPrimary)),
                   onTap: () {
                     _scaffoldKey.currentState?.closeDrawer();
                     Get.toNamed(Routes.modoAcople);
@@ -242,18 +276,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
             // Sección de Historial
             ExpansionTile(
-              leading: const Icon(Icons.history),
-              title: const Text('Historial'),
+              leading: const Icon(Icons.history,
+                  color: AppColors.textPrimary), // Color del icono
+              title: const Text('Historial',
+                  style: TextStyle(
+                      color: AppColors.textPrimary)), // Color del texto
               children: <Widget>[
                 ListTile(
-                  title: const Text('Historial de Monitoreo'),
+                  title: const Text('Historial de Monitoreo',
+                      style: TextStyle(color: AppColors.textPrimary)),
                   onTap: () {
                     _scaffoldKey.currentState?.closeDrawer();
                     Get.toNamed(Routes.historialApp);
                   },
                 ),
                 ListTile(
-                  title: const Text('Rutas'),
+                  title: const Text('Rutas',
+                      style: TextStyle(color: AppColors.textPrimary)),
                   onTap: () {
                     _scaffoldKey.currentState?.closeDrawer();
                     // Define una ruta para esto en app_pages.dart si no existe
@@ -261,7 +300,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
                 ListTile(
-                  title: const Text('Ubicación'),
+                  title: const Text('Ubicación',
+                      style: TextStyle(color: AppColors.textPrimary)),
                   onTap: () {
                     _scaffoldKey.currentState?.closeDrawer();
                     // Define una ruta para esto en app_pages.dart si no existe
@@ -273,8 +313,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
             // Comunicación BLE
             ListTile(
-              leading: const Icon(Icons.bluetooth),
-              title: const Text('Comunicacion BLE'),
+              leading: const Icon(Icons.bluetooth,
+                  color: AppColors.textPrimary), // Color del icono
+              title: const Text('Comunicacion BLE',
+                  style: TextStyle(
+                      color: AppColors.textPrimary)), // Color del texto
               onTap: () {
                 _scaffoldKey.currentState?.closeDrawer();
                 Get.toNamed(Routes.comunicacionBle);
@@ -283,29 +326,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
             // Acerca de
             ListTile(
-              leading: const Icon(Icons.info),
-              title: const Text('Acerca de'),
+              leading: const Icon(Icons.info,
+                  color: AppColors.textPrimary), // Color del icono
+              title: const Text('Acerca de',
+                  style: TextStyle(
+                      color: AppColors.textPrimary)), // Color del texto
               onTap: () {
                 _scaffoldKey.currentState?.closeDrawer();
                 Get.toNamed(Routes.acercaApp);
               },
             ),
 
-            // Mi Perfil (Navegar a la pantalla de perfil)
-            ListTile(
-              leading: const Icon(Icons.person),
-              title: const Text('Mi Perfil'),
-              onTap: () {
-                _scaffoldKey.currentState?.closeDrawer();
-                Get.toNamed(Routes
-                    .profile); // Navega a la pantalla de perfil por su nombre
-              },
-            ),
+            // --- ELIMINADA LA OPCIÓN 'Mi Perfil' DE AQUÍ ---
 
             // Cerrar sesión
             ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Cerrar sesión'),
+              leading: const Icon(Icons.logout,
+                  color: AppColors.textPrimary), // Color del icono
+              title: const Text('Cerrar sesión',
+                  style: TextStyle(
+                      color: AppColors.textPrimary)), // Color del texto
               onTap: () async {
                 _scaffoldKey.currentState?.closeDrawer();
                 await _authService
