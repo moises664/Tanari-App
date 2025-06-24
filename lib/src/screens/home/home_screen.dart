@@ -9,10 +9,8 @@ import 'package:get/get.dart';
 import 'package:tanari_app/src/screens/menu/historial_app.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_monitoreo.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_ugv.dart';
-import 'package:tanari_app/src/screens/menu/profile_user_screen.dart';
+import 'package:tanari_app/src/screens/menu/profile_screen.dart';
 
-/// Pantalla principal de la aplicación después del login.
-/// Muestra un menú lateral (Drawer) y una barra de navegación inferior personalizada.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -21,26 +19,20 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Obtener la instancia del AuthService y UserProfileService usando GetX
   final AuthService _authService = Get.find<AuthService>();
   final UserProfileService _userProfileService = Get.find<UserProfileService>();
 
-  // DECLARACIÓN DE LA GLOBALKEY PARA EL SCAFFOLD
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
-  // Variable para el índice seleccionado en el Bottom Navigation Bar
   int _selectedIndex = 0;
 
-  // Lista de widgets que representan cada pestaña del Bottom Navigation Bar
   final List<Widget> _widgetOptions = <Widget>[
     const HomeTab(),
     const ModoMonitoreo(),
     const ModoUgv(),
     const HistorialApp(),
-    ProfileUserScreen() // La pantalla de perfil
+    const ProfileScreen()
   ];
 
-  /// Maneja el cambio de pestaña en la barra de navegación inferior
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
@@ -52,9 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) {
-          return;
-        }
+        if (didPop) return;
 
         final bool? shouldExit = await showDialog<bool>(
           context: context,
@@ -67,9 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: const Text('No'),
               ),
               TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop(true);
-                },
+                onPressed: () => Navigator.of(context).pop(true),
                 child: const Text('Sí'),
               ),
             ],
@@ -106,7 +94,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Construye la barra de navegación inferior personalizada
   Widget _buildCustomBottomNavigationBar(BuildContext context) {
     return SafeArea(
       child: Container(
@@ -141,7 +128,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Construye un ítem individual de la barra de navegación
   Widget _buildNavItem(int index, IconData icon, String label) {
     final bool isSelected = _selectedIndex == index;
     return GestureDetector(
@@ -175,77 +161,60 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Construye el menú lateral (Drawer)
   Drawer _buildMenuDrawer(BuildContext context) => Drawer(
         backgroundColor: Colors.white,
         child: ListView(
-          padding: EdgeInsets
-              .zero, // Elimina el padding por defecto para que UserAccountsDrawerHeader ocupe todo el ancho.
+          padding: EdgeInsets.zero,
           children: [
-            // Cabecera con información del usuario (ahora un botón)
+            // CABECERA CON INFORMACIÓN DEL USUARIO
             InkWell(
-              // Envuelve UserAccountsDrawerHeader con InkWell para hacerlo tappable
               onTap: () {
-                _scaffoldKey.currentState?.closeDrawer(); // Cierra el drawer
-                Get.toNamed(Routes.profile); // Navega a la pantalla de perfil
+                setState(() => _selectedIndex = 4);
+                _scaffoldKey.currentState?.closeDrawer();
               },
               child: Obx(() {
                 final user = _authService.currentUser.value;
-                final userProfile =
-                    _userProfileService.currentUserProfile.value;
-
-                // Acceso a las propiedades del objeto UserProfile
-                final String username = userProfile?.username ??
-                    user?.userMetadata?['username'] as String? ??
-                    'Usuario Tanari';
-                final String email =
-                    userProfile?.email ?? user?.email ?? 'correo@ejemplo.com';
-                final String? avatarUrl = userProfile?.avatarUrl;
+                final userProfile = _userProfileService.currentProfile.value;
 
                 return UserAccountsDrawerHeader(
                   decoration: const BoxDecoration(
-                    color: AppColors
-                        .accent, // Usando el color accent para la cabecera
+                    color: AppColors.accent,
                   ),
                   accountName: Text(
-                    username,
+                    userProfile?.username ?? 'Usuario Tanari',
                     style: const TextStyle(
-                      color: AppColors
-                          .backgroundWhite, // Texto blanco para el nombre
+                      color: AppColors.backgroundWhite,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   accountEmail: Text(
-                    email,
+                    userProfile?.email ?? user?.email ?? 'correo@ejemplo.com',
                     style: TextStyle(
-                      color: AppColors.backgroundWhite.withOpacity(
-                          0.8), // Texto blanco semi-transparente para el email
+                      color: AppColors.backgroundWhite.withOpacity(0.8),
                     ),
                   ),
                   currentAccountPicture: CircleAvatar(
-                    backgroundColor:
-                        AppColors.primary, // Fondo del avatar (verde lima)
-                    backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
-                        ? NetworkImage(avatarUrl) as ImageProvider
+                    backgroundColor: AppColors.primary,
+                    backgroundImage: (userProfile?.avatarUrl != null &&
+                            userProfile!.avatarUrl!.isNotEmpty)
+                        ? NetworkImage(userProfile.avatarUrl!) as ImageProvider
                         : null,
-                    child: (avatarUrl == null || avatarUrl.isEmpty)
+                    child: (userProfile?.avatarUrl == null ||
+                            userProfile!.avatarUrl!.isEmpty)
                         ? const Icon(Icons.person,
-                            size: 40,
-                            color: AppColors
-                                .textPrimary) // Ícono de persona con color de texto primario
+                            size: 40, color: AppColors.textPrimary)
                         : null,
                   ),
                 );
               }),
             ),
 
-            // Sección de Modos de Operación
+            // MODOS DE OPERACIÓN
             ExpansionTile(
-              leading: const Icon(Icons.car_rental,
-                  color: AppColors.textPrimary), // Color del icono
+              leading:
+                  const Icon(Icons.car_rental, color: AppColors.textPrimary),
               title: const Text('Modos de Operacion',
-                  style: TextStyle(
-                      color: AppColors.textPrimary)), // Color del texto
+                  style: TextStyle(color: AppColors.textPrimary)),
               children: <Widget>[
                 ListTile(
                   title: const Text('Tanari DP',
@@ -274,13 +243,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
 
-            // Sección de Historial
+            // HISTORIAL
             ExpansionTile(
-              leading: const Icon(Icons.history,
-                  color: AppColors.textPrimary), // Color del icono
+              leading: const Icon(Icons.history, color: AppColors.textPrimary),
               title: const Text('Historial',
-                  style: TextStyle(
-                      color: AppColors.textPrimary)), // Color del texto
+                  style: TextStyle(color: AppColors.textPrimary)),
               children: <Widget>[
                 ListTile(
                   title: const Text('Historial de Monitoreo',
@@ -295,8 +262,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: TextStyle(color: AppColors.textPrimary)),
                   onTap: () {
                     _scaffoldKey.currentState?.closeDrawer();
-                    // Define una ruta para esto en app_pages.dart si no existe
-                    // Get.toNamed(Routes.rutas); // Ejemplo
                   },
                 ),
                 ListTile(
@@ -304,52 +269,42 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: TextStyle(color: AppColors.textPrimary)),
                   onTap: () {
                     _scaffoldKey.currentState?.closeDrawer();
-                    // Define una ruta para esto en app_pages.dart si no existe
-                    // Get.toNamed(Routes.ubicacion); // Ejemplo
                   },
                 ),
               ],
             ),
 
-            // Comunicación BLE
+            // COMUNICACIÓN BLE
             ListTile(
-              leading: const Icon(Icons.bluetooth,
-                  color: AppColors.textPrimary), // Color del icono
+              leading:
+                  const Icon(Icons.bluetooth, color: AppColors.textPrimary),
               title: const Text('Comunicacion BLE',
-                  style: TextStyle(
-                      color: AppColors.textPrimary)), // Color del texto
+                  style: TextStyle(color: AppColors.textPrimary)),
               onTap: () {
                 _scaffoldKey.currentState?.closeDrawer();
                 Get.toNamed(Routes.comunicacionBle);
               },
             ),
 
-            // Acerca de
+            // ACERCA DE
             ListTile(
-              leading: const Icon(Icons.info,
-                  color: AppColors.textPrimary), // Color del icono
+              leading: const Icon(Icons.info, color: AppColors.textPrimary),
               title: const Text('Acerca de',
-                  style: TextStyle(
-                      color: AppColors.textPrimary)), // Color del texto
+                  style: TextStyle(color: AppColors.textPrimary)),
               onTap: () {
                 _scaffoldKey.currentState?.closeDrawer();
                 Get.toNamed(Routes.acercaApp);
               },
             ),
 
-            // --- ELIMINADA LA OPCIÓN 'Mi Perfil' DE AQUÍ ---
-
-            // Cerrar sesión
+            // CERRAR SESIÓN
             ListTile(
-              leading: const Icon(Icons.logout,
-                  color: AppColors.textPrimary), // Color del icono
+              leading: const Icon(Icons.logout, color: AppColors.textPrimary),
               title: const Text('Cerrar sesión',
-                  style: TextStyle(
-                      color: AppColors.textPrimary)), // Color del texto
+                  style: TextStyle(color: AppColors.textPrimary)),
               onTap: () async {
                 _scaffoldKey.currentState?.closeDrawer();
-                await _authService
-                    .signOut(); // AuthService se encarga de la redirección
+                await _authService.signOut();
               },
             ),
           ],

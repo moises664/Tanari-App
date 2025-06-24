@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tanari_app/src/controllers/services/auth_service.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
-import 'package:tanari_app/src/screens/login/signup_screen.dart'; // Mantén si lo usas
-import 'package:tanari_app/src/screens/login/forget_password.dart'; // Mantén si lo usas
-import 'package:tanari_app/src/widgets/custom_scaffold.dart'; // Asegúrate de que esta ruta sea correcta
-import 'package:get/get.dart'; // Para Get.find y Obx
+import 'package:tanari_app/src/routes/app_pages.dart'; // Importa las rutas para Get.toNamed
+import 'package:tanari_app/src/widgets/custom_scaffold.dart';
+import 'package:get/get.dart';
 
 /// Pantalla de inicio de sesión que maneja autenticación con Supabase
 class SignInScreen extends StatefulWidget {
@@ -74,20 +73,21 @@ class _SignInScreenState extends State<SignInScreen> {
         _emailController.text.trim(),
         _passwordController.text.trim(),
       );
-      // La navegación a HomeScreen se manejará automáticamente en AuthService
-      // gracias al listener de authService.currentUser y el _onAuthChange en AuthService.
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return CustomScaffold(
       child: Column(
         children: [
-          const Expanded(flex: 1, child: SizedBox(height: 10)),
+          SizedBox(height: screenHeight * 0.05), // Espacio superior responsivo
           Expanded(
             flex: 7,
-            child: _buildLoginForm(),
+            child: _buildLoginForm(screenHeight, screenWidth),
           ),
         ],
       ),
@@ -95,9 +95,14 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   /// Construye el formulario de inicio de sesión
-  Widget _buildLoginForm() {
+  Widget _buildLoginForm(double screenHeight, double screenWidth) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(25.0, 50.0, 25.0, 20.0),
+      padding: EdgeInsets.fromLTRB(
+        screenWidth * 0.07, // Padding horizontal responsivo
+        screenHeight * 0.06, // Padding superior responsivo
+        screenWidth * 0.07, // Padding horizontal responsivo
+        screenHeight * 0.03, // Padding inferior responsivo
+      ),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.only(
@@ -111,24 +116,23 @@ class _SignInScreenState extends State<SignInScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _buildTitle(),
-              const SizedBox(height: 40.0),
-              _buildEmailField(),
-              const SizedBox(height: 25.0),
-              _buildPasswordField(),
-              const SizedBox(height: 25.0),
-              _buildRememberForgotRow(),
-              const SizedBox(height: 25.0),
+              _buildTitle(screenWidth),
+              SizedBox(height: screenHeight * 0.04), // Espacio responsivo
+              _buildEmailField(screenWidth), // Pasa screenWidth
+              SizedBox(height: screenHeight * 0.025), // Espacio responsivo
+              _buildPasswordField(screenWidth), // Pasa screenWidth
+              SizedBox(height: screenHeight * 0.025), // Espacio responsivo
+              _buildRememberForgotRow(screenWidth),
+              SizedBox(height: screenHeight * 0.025), // Espacio responsivo
               // Envuelve el botón en Obx para reaccionar al estado de carga del AuthService
               Obx(() => _authService
                       .isLoading.value // <--- Accede al valor con .value
                   ? const CircularProgressIndicator() // Muestra un cargando
-                  : _buildLoginButton()),
-              const SizedBox(height: 25.0),
-              const SizedBox(
-                  height: 25.0), // Mantengo si eliminas los social logins
-              _buildSignUpLink(),
-              const SizedBox(height: 20.0),
+                  : _buildLoginButton(screenWidth)),
+              SizedBox(height: screenHeight * 0.025), // Espacio responsivo
+              _buildSignUpLink(screenWidth),
+              SizedBox(
+                  height: screenHeight * 0.02), // Espacio inferior responsivo
             ],
           ),
         ),
@@ -137,11 +141,11 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   /// Construye el título del formulario
-  Widget _buildTitle() {
+  Widget _buildTitle(double screenWidth) {
     return Text(
       'Iniciar Sesión',
       style: TextStyle(
-        fontSize: 30.0,
+        fontSize: screenWidth * 0.08, // Tamaño de fuente responsivo
         fontWeight: FontWeight.w900,
         color: AppColors.primary,
       ),
@@ -149,7 +153,8 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   /// Construye el campo de entrada para el email
-  Widget _buildEmailField() {
+  Widget _buildEmailField(double screenWidth) {
+    // Recibe screenWidth
     return TextFormField(
       controller: _emailController,
       validator: (value) {
@@ -160,7 +165,9 @@ class _SignInScreenState extends State<SignInScreen> {
         return null;
       },
       decoration: InputDecoration(
-        label: const Text('Correo'),
+        label: Text('Correo',
+            style:
+                TextStyle(fontSize: screenWidth * 0.038)), // Fuente responsiva
         hintText: 'Introduce tu correo electrónico',
         hintStyle: const TextStyle(color: Colors.black26),
         border: _inputBorder(),
@@ -172,7 +179,8 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   /// Construye el campo de entrada para la contraseña
-  Widget _buildPasswordField() {
+  Widget _buildPasswordField(double screenWidth) {
+    // Recibe screenWidth
     return TextFormField(
       controller: _passwordController,
       obscureText: true,
@@ -183,7 +191,9 @@ class _SignInScreenState extends State<SignInScreen> {
         return null;
       },
       decoration: InputDecoration(
-        label: const Text('Contraseña'),
+        label: Text('Contraseña',
+            style:
+                TextStyle(fontSize: screenWidth * 0.038)), // Fuente responsiva
         hintText: 'Introduce tu contraseña',
         hintStyle: const TextStyle(color: Colors.black26),
         border: _inputBorder(),
@@ -203,11 +213,13 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   /// Fila con checkbox "Recordarme" y enlace "Olvidé contraseña"
-  Widget _buildRememberForgotRow() {
+  Widget _buildRememberForgotRow(double screenWidth) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Row(
+          mainAxisSize:
+              MainAxisSize.min, // Para que el Row ocupe lo mínimo necesario
           children: [
             Checkbox(
               value: rememberPassword,
@@ -215,21 +227,28 @@ class _SignInScreenState extends State<SignInScreen> {
                   setState(() => rememberPassword = value!),
               activeColor: AppColors.primary,
             ),
-            const Text(
-              '¡Recuérdame!',
-              style: TextStyle(color: Colors.black45),
+            Flexible(
+              // Usar Flexible para que el texto se ajuste
+              child: Text(
+                '¡Recuérdame!',
+                style: TextStyle(
+                    color: Colors.black45,
+                    fontSize:
+                        screenWidth * 0.035), // Tamaño de fuente responsivo
+              ),
             ),
           ],
         ),
         GestureDetector(
           onTap: () {
-            Get.to(() => const ForgetPassword());
+            Get.toNamed(Routes.forgetPassword); // Usa Get.toNamed
           },
           child: Text(
             '¿Olvidaste tu contraseña?',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: AppColors.primary,
+              fontSize: screenWidth * 0.035, // Tamaño de fuente responsivo
             ),
           ),
         ),
@@ -238,45 +257,50 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   /// Botón principal de inicio de sesión
-  Widget _buildLoginButton() {
+  Widget _buildLoginButton(double screenWidth) {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
         onPressed: _handleLogin,
         style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 15),
+          padding: EdgeInsets.symmetric(
+              vertical: screenWidth * 0.04), // Padding vertical responsivo
           backgroundColor: AppColors.backgroundBlack,
           foregroundColor: AppColors.primary,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
         ),
-        child: const Text(
+        child: Text(
           'Inicia Sesión',
-          style: TextStyle(fontSize: 16),
+          style: TextStyle(
+              fontSize: screenWidth * 0.045), // Tamaño de fuente responsivo
         ),
       ),
     );
   }
 
   /// Enlace para registrar nueva cuenta
-  Widget _buildSignUpLink() {
+  Widget _buildSignUpLink(double screenWidth) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Text(
+        Text(
           '¿No tienes una cuenta? ',
-          style: TextStyle(color: Colors.black45),
+          style: TextStyle(
+              color: Colors.black45,
+              fontSize: screenWidth * 0.035), // Tamaño de fuente responsivo
         ),
         GestureDetector(
           onTap: () {
-            Get.to(() => const SignUpScreen());
+            Get.toNamed(Routes.signUp); // Usa Get.toNamed
           },
           child: Text(
             'Regístrate',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: AppColors.primary,
+              fontSize: screenWidth * 0.035, // Tamaño de fuente responsivo
             ),
           ),
         ),

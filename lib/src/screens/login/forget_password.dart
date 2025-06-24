@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:tanari_app/src/controllers/services/auth_service.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
-import 'package:tanari_app/src/widgets/custom_scaffold.dart'; // Asegúrate de que esta ruta sea correcta
-import 'package:get/get.dart'; // Asegúrate de que Get esté importado
+import 'package:tanari_app/src/widgets/custom_scaffold.dart';
+import 'package:get/get.dart';
 
 class ForgetPassword extends StatefulWidget {
   const ForgetPassword({super.key});
@@ -15,7 +15,6 @@ class _ForgetPasswordState extends State<ForgetPassword> {
   final TextEditingController _emailController = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
-  // Obtener la instancia del AuthService
   final AuthService _authService = Get.find<AuthService>();
 
   @override
@@ -27,26 +26,29 @@ class _ForgetPasswordState extends State<ForgetPassword> {
   /// Maneja la solicitud de restablecimiento de contraseña
   Future<void> _handleResetPassword() async {
     if (_formKey.currentState!.validate()) {
-      // *** CORRECCIÓN: Usar el nombre del método correcto y .trim() ***
-      await _authService.sendPasswordRecoveryEmail(_emailController.text
-          .trim()); // El método es sendPasswordRecoveryEmail
-      // El AuthService ya muestra un snackbar de éxito o error
-      // Puedes añadir navegación de vuelta al login si lo deseas aquí,
-      // o dejar que el usuario permanezca en esta pantalla después del envío.
-      // Get.back(); // Para regresar a la pantalla de inicio de sesión
+      await _authService
+          .sendPasswordRecoveryEmail(_emailController.text.trim());
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return CustomScaffold(
       child: Column(
         children: [
-          const Expanded(flex: 1, child: SizedBox(height: 10)),
+          SizedBox(height: screenHeight * 0.05), // Espacio superior responsivo
           Expanded(
             flex: 7,
             child: Container(
-              padding: const EdgeInsets.fromLTRB(25.0, 50.0, 25.0, 20.0),
+              padding: EdgeInsets.fromLTRB(
+                screenWidth * 0.07, // Padding horizontal responsivo
+                screenHeight * 0.06, // Padding superior responsivo
+                screenWidth * 0.07, // Padding horizontal responsivo
+                screenHeight * 0.03, // Padding inferior responsivo
+              ),
               decoration: const BoxDecoration(
                 color: AppColors.backgroundWhite,
                 borderRadius: BorderRadius.only(
@@ -63,21 +65,25 @@ class _ForgetPasswordState extends State<ForgetPassword> {
                       Text(
                         'Restablecer Contraseña',
                         style: TextStyle(
-                          fontSize: 30.0,
+                          fontSize:
+                              screenWidth * 0.08, // Tamaño de fuente responsivo
                           fontWeight: FontWeight.w900,
                           color: AppColors.primary,
                         ),
                       ),
-                      const SizedBox(height: 40),
+                      SizedBox(
+                          height: screenHeight * 0.04), // Espacio responsivo
                       Text(
                         'Ingresa tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize:
+                              screenWidth * 0.04, // Tamaño de fuente responsivo
                           color: Colors.black54,
                         ),
                       ),
-                      const SizedBox(height: 30),
+                      SizedBox(
+                          height: screenHeight * 0.03), // Espacio responsivo
                       TextFormField(
                         controller: _emailController,
                         validator: (value) {
@@ -90,14 +96,16 @@ class _ForgetPasswordState extends State<ForgetPassword> {
                           return null;
                         },
                         decoration: _inputDecoration(
-                            'Correo Electrónico', 'ejemplo@correo.com'),
+                            'Correo Electrónico',
+                            'ejemplo@correo.com',
+                            screenWidth), // Pasa screenWidth
                         keyboardType: TextInputType.emailAddress,
                       ),
-                      const SizedBox(height: 30),
-                      // *** CORRECCIÓN: Envuelve en Obx y accede a .value ***
+                      SizedBox(
+                          height: screenHeight * 0.03), // Espacio responsivo
+                      // Envuelve en Obx y accede a .value
                       Obx(
-                        () => _authService
-                                .isLoading.value // ¡Aquí está la corrección!
+                        () => _authService.isLoading.value
                             ? const CircularProgressIndicator()
                             : SizedBox(
                                 width: double.infinity,
@@ -106,19 +114,23 @@ class _ForgetPasswordState extends State<ForgetPassword> {
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.backgroundBlack,
                                     foregroundColor: AppColors.primary,
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 15),
+                                    padding: EdgeInsets.symmetric(
+                                        vertical: screenWidth *
+                                            0.04), // Padding responsivo
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                   ),
-                                  child: const Text('Enviar Enlace',
-                                      style: TextStyle(fontSize: 16)),
+                                  child: Text('Enviar Enlace',
+                                      style: TextStyle(
+                                          fontSize: screenWidth *
+                                              0.045)), // Fuente responsiva
                                 ),
                               ),
                       ),
-                      const SizedBox(height: 20),
-                      _buildSignInLink(), // Enlace para volver al login
+                      SizedBox(
+                          height: screenHeight * 0.02), // Espacio responsivo
+                      _buildSignInLink(screenWidth), // Pasa screenWidth
                     ],
                   ),
                 ),
@@ -131,9 +143,12 @@ class _ForgetPasswordState extends State<ForgetPassword> {
   }
 
   // Método auxiliar para el estilo de los inputs
-  InputDecoration _inputDecoration(String label, String hint) {
+  InputDecoration _inputDecoration(
+      String label, String hint, double screenWidth) {
+    // Recibe screenWidth
     return InputDecoration(
-      label: Text(label),
+      label: Text(label,
+          style: TextStyle(fontSize: screenWidth * 0.038)), // Fuente responsiva
       hintText: hint,
       hintStyle: const TextStyle(color: Colors.black26),
       border: _inputBorder(),
@@ -150,23 +165,26 @@ class _ForgetPasswordState extends State<ForgetPassword> {
   }
 
   // Enlace para volver a la pantalla de inicio de sesión
-  Widget _buildSignInLink() {
+  Widget _buildSignInLink(double screenWidth) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Text(
+        Text(
           '¿Recordaste tu contraseña? ',
-          style: TextStyle(color: Colors.black45),
+          style: TextStyle(
+              color: Colors.black45,
+              fontSize: screenWidth * 0.035), // Fuente responsiva
         ),
         GestureDetector(
           onTap: () {
-            Get.back(); // Simplemente regresa a la pantalla anterior (SignInScreen)
+            Get.back(); // Regresa a la pantalla anterior (SignInScreen)
           },
           child: Text(
             'Inicia sesión',
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: AppColors.primary,
+              fontSize: screenWidth * 0.035, // Fuente responsiva
             ),
           ),
         ),

@@ -45,5 +45,45 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+
+	<!-- INICIO DE LA NUEVA SECCIÓN DE DEEP LINKS PARA SUPABASE -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>tanariapp</string> <!-- Tu esquema personalizado -->
+			</array>
+		</dict>
+	</array>
+	<!-- FIN DE LA NUEVA SECCIÓN DE DEEP LINKS -->
+
+	<!-- INICIO DE PERMISOS DE PRIVACIDAD PARA IMAGEN Y CÁMARA (para subir avatar) -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Esta aplicación necesita acceso a tu biblioteca de fotos para seleccionar y subir una foto de perfil.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Esta aplicación necesita acceso a tu cámara para tomar fotos para tu perfil.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Esta aplicación necesita acceso a tu micrófono para grabar videos si decides usar uno como foto de perfil (aunque actualmente solo se usan imágenes).</string>
+	<!-- FIN DE PERMISOS DE PRIVACIDAD -->
+
+	<!-- INICIO DE PERMISOS DE PRIVACIDAD PARA LOCALIZACIÓN -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Esta aplicación necesita acceso a tu ubicación cuando está en uso para el monitoreo de dispositivos y rutas UGV.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Esta aplicación necesita acceso a tu ubicación en todo momento para el monitoreo continuo de dispositivos y rutas UGV en segundo plano.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Esta aplicación necesita acceso a tu ubicación en todo momento para el monitoreo continuo de dispositivos y rutas UGV, incluso cuando la aplicación no está en uso activo.</string>
+	<!-- FIN DE PERMISOS DE PRIVACIDAD PARA LOCALIZACIÓN -->
+
+	<!-- INICIO DE PERMISOS DE PRIVACIDAD PARA BLUETOOTH -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Esta aplicación necesita acceso a Bluetooth para escanear y conectarse a dispositivos externos (UGV y sensores) para el monitoreo de operaciones.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Esta aplicación necesita acceso a Bluetooth para conectarse a dispositivos periféricos cercanos.</string>
+	<!-- FIN DE PERMISOS DE PRIVACIDAD PARA BLUETOOTH -->
+
 </dict>
 </plist>

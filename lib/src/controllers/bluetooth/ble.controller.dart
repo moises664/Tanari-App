@@ -22,7 +22,7 @@ class BleController extends GetxController {
   //----------------------------------------------------------------------------
   // UUID del servicio BLE para ambos dispositivos Tanari.
   static const serviceUuid = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
-  // UUID de la característica para enviar comandos y recibir data (si aplica) del UGV.
+  // UUID de la característica para enviar comandos y recibir data (si aaplica) del UGV.
   static const characteristicUuidUGV = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
   // UUID de la característica para notificaciones (recepción de datos) del Tanari DP.
   static const characteristicUuidPortableNotify =
@@ -414,29 +414,6 @@ class BleController extends GetxController {
         if (data == toggleLedOn || data == toggleLedOff) {
           ledStateUGV.value = data == toggleLedOn;
         }
-
-        // --- INICIO DE CORRECCIÓN: Eliminar la desactivación automática por comandos de movimiento/grabación ---
-        // La lógica de desactivación del modo automático ahora solo se maneja en ModoUgv
-        // mediante el botón "Stop" (interruption) o el botón "Auto" mismo.
-        // Se elimina la siguiente sección comentada:
-        /*
-        if ([
-          moveForward,
-          moveBack,
-          moveRight,
-          moveLeft,
-          stop,
-          endAutoMode, // Finalizar modo automático
-          startRecording,
-          stopRecording,
-        ].contains(data)) {
-          if (isAutomaticMode.value && data != interruption) {
-            isAutomaticMode.value = false;
-            _logger.i("Modo automático desactivado por comando manual/grabar.");
-          }
-        }
-        */
-        // --- FIN DE CORRECCIÓN ---
       }
     } catch (e) {
       _logger.e("Error al enviar datos a $deviceId: $e");
@@ -590,22 +567,15 @@ class BleController extends GetxController {
   void _parseAndStorePortableData(String data) {
     try {
       final List<String> parts = data.split(';');
-      // Si el formato es "CO2;CH4;Temp;Hum;Pres"
-      if (parts.length >= 5) {
-        // Cambia el 4 por 5 para incluir la presión
+      // Si el formato es "CO2;CH4;Temp;Hum" o "CO2;CH4;Temp;Hum;Pres"
+      if (parts.length >= 4) {
+        // Cambiado a >=4 para ser flexible con o sin presión
         portableData['co2'] = parts[0];
         portableData['ch4'] = parts[1];
         portableData['temperature'] = parts[2];
         portableData['humidity'] = parts[3];
-        //portableData['pressure'] = parts[4]; // Añade esta línea para la presión
-        portableData.refresh();
-      } else if (parts.length == 4) {
-        // Si solo se reciben 4 partes (sin presión)
-        portableData['co2'] = parts[0];
-        portableData['ch4'] = parts[1];
-        portableData['temperature'] = parts[2];
-        portableData['humidity'] = parts[3];
-        //portableData['pressure'] = '--'; // Establece presión a '--'
+        // Solo intenta parsear pressure si la longitud es 5 o más
+        portableData['pressure'] = (parts.length >= 5) ? parts[4] : '--';
         portableData.refresh();
       } else {
         _logger.w('Formato de datos del Tanari DP incorrecto: $data');
@@ -708,13 +678,13 @@ class BleController extends GetxController {
       isRecording.value = false;
       isAutomaticMode.value = false;
       isUgvConnected.value = false; // Actualiza el estado de conexión del UGV.
+      receivedData.value = null; // Limpiar datos recibidos del UGV
     }
     if (portableDeviceId == deviceId) {
+      isPortableConnected.value = false;
       portableDeviceId = null;
       portableCharacteristic = null;
       portableData.clear(); // Limpia los datos del DP.
-      isPortableConnected.value =
-          false; // Actualiza el estado de conexión del Portable.
     }
     // Asegurarse de que el FoundDevice correspondiente en la lista principal se actualice
     // para reflejar que ya no está conectado. No lo removemos de foundDevices
@@ -737,9 +707,15 @@ class BleController extends GetxController {
     stopScan(); // Detiene cualquier escaneo activo.
 
     // Cancela todos los timers y suscripciones restantes.
-    _rssiTimers.values.forEach((timer) => timer.cancel());
-    _valueSubscriptions.values.forEach((sub) => sub.cancel());
-    _connectionSubscriptions.values.forEach((sub) => sub.cancel());
+    for (var timer in _rssiTimers.values) {
+      timer.cancel();
+    }
+    for (var sub in _valueSubscriptions.values) {
+      sub.cancel();
+    }
+    for (var sub in _connectionSubscriptions.values) {
+      sub.cancel();
+    }
 
     // Desconecta activamente todos los dispositivos que aún estén conectados.
     // Usar toList() para evitar modificar la colección mientras se itera.

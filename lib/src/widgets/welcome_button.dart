@@ -2,38 +2,42 @@ import 'package:flutter/material.dart';
 
 class WelcomeButton extends StatelessWidget {
   final String? buttonText;
-  // CAMBIO CLAVE AQUÍ: 'onTap' ahora es una VoidCallback (una función que no devuelve nada y no toma argumentos)
-  final VoidCallback? onTap; // Ahora acepta una función, y puede ser nula.
+  final VoidCallback? onTap;
   final Color? color;
   final Color? textColor;
+  final Color? borderColor; // ¡Asegúrate de que este parámetro exista!
 
   const WelcomeButton({
     super.key,
     this.buttonText,
-    required this.onTap, // Lo hacemos requerido para asegurar que siempre haya una acción
+    required this.onTap,
     this.color,
     this.textColor,
+    this.borderColor, // Se recibe aquí
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      // Ahora, 'onTap' del GestureDetector es directamente la función 'onTap' que recibe WelcomeButton
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(30),
+        padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 20.0),
         decoration: BoxDecoration(
-          color: color!,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(40),
+          color: color,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: borderColor ??
+                Colors
+                    .transparent, // Usa el color del borde si está definido, sino transparente
+            width: 2,
           ),
         ),
         child: Text(
           buttonText!,
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: textColor!,
-            fontSize: 20,
+            color: textColor,
+            fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
         ),
