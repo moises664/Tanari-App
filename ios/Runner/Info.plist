@@ -54,10 +54,51 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>tanariapp</string> <!-- Tu esquema personalizado -->
+				 <string>tanariapp</string> <!-- Tu esquema de deep link -->
 			</array>
 		</dict>
-	</array>
+	</array><!-- SECCIÓN DE DEEP LINKS OPTIMIZADA -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            
+            <!-- Nombre único para identificar el esquema -->
+            <key>CFBundleURLName</key>
+            <string>com.tanariapp.deeplinks</string>
+            
+            <!-- Esquema personalizado -->
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>tanariapp</string>
+            </array>
+        </dict>
+    </array>
+
+    <!-- IMPORTANTE: Configuración para iOS 13+ -->
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UIApplicationSupportsMultipleScenes</key>
+        <false/>
+        <key>UISceneConfigurations</key>
+        <dict>
+            <key>UIWindowSceneSessionRoleApplication</key>
+            <array>
+                <dict>
+                    <key>UISceneConfigurationName</key>
+                    <string>Default Configuration</string>
+                    <key>UISceneDelegateClassName</key>
+                    <string>FlutterSceneDelegate</string>
+                    <!-- Necesario para manejar deep links en iOS 13+ -->
+                    <key>UISceneStoryboardFile</key>
+                    <string>Main</string>
+                </dict>
+            </array>
+        </dict>
+    </dict>
+    <!-- FIN DE CONFIGURACIÓN iOS 13+ -->
+
 	<!-- FIN DE LA NUEVA SECCIÓN DE DEEP LINKS -->
 
 	<!-- INICIO DE PERMISOS DE PRIVACIDAD PARA IMAGEN Y CÁMARA (para subir avatar) -->

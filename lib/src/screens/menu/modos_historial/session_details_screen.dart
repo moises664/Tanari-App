@@ -412,9 +412,8 @@ class SessionDetailsScreen extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
         decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.primary.withOpacity(0.2)
-              : Colors.transparent,
+          color:
+              isSelected ? AppColors.primary.withAlpha(51) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isSelected ? AppColors.primary : Colors.transparent,
@@ -506,7 +505,7 @@ class SessionDetailsScreen extends StatelessWidget {
         }
       },
       backgroundColor: Colors.transparent,
-      selectedColor: color.withOpacity(0.2),
+      selectedColor: color.withAlpha(51),
       labelStyle: theme.textTheme.bodyMedium?.copyWith(
         color: isSelected ? color : AppColors.textSecondary,
         fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
@@ -643,7 +642,7 @@ class SessionDetailsScreen extends StatelessWidget {
         controller.discreteMode[sensor] = selected;
       },
       backgroundColor: Colors.transparent,
-      selectedColor: color.withOpacity(0.2),
+      selectedColor: color.withAlpha(51),
       labelStyle: theme.textTheme.bodyMedium?.copyWith(
         color: isDiscrete ? color : AppColors.textSecondary,
         fontWeight: isDiscrete ? FontWeight.bold : FontWeight.normal,
@@ -941,7 +940,7 @@ class SessionDetailsScreen extends StatelessWidget {
                     lineTouchData: LineTouchData(
                       touchTooltipData: LineTouchTooltipData(
                         tooltipBgColor: Color.alphaBlend(
-                            AppColors.textPrimary.withOpacity(0.8),
+                            AppColors.textPrimary.withAlpha(204),
                             Colors.transparent),
                         tooltipRoundedRadius: 8.0,
                         getTooltipItems: (touchedSpots) {
@@ -983,7 +982,7 @@ class SessionDetailsScreen extends StatelessWidget {
                                   style: TextStyle(
                                       color: Color.alphaBlend(
                                           AppColors.backgroundWhite
-                                              .withOpacity(0.8),
+                                              .withAlpha(204),
                                           Colors.transparent),
                                       fontSize: 10),
                                 ),
@@ -1279,14 +1278,14 @@ class SessionDetailsScreen extends StatelessWidget {
                               belowBarData: BarAreaData(
                                 show: true,
                                 color: Color.alphaBlend(
-                                    color.withOpacity(0.3), Colors.transparent),
+                                    color.withAlpha(77), Colors.transparent),
                               ),
                             ),
                           ],
                           lineTouchData: LineTouchData(
                             touchTooltipData: LineTouchTooltipData(
                               tooltipBgColor: Color.alphaBlend(
-                                  AppColors.textPrimary.withOpacity(0.8),
+                                  AppColors.textPrimary.withAlpha(204),
                                   Colors.transparent),
                               tooltipRoundedRadius: 8.0,
                               getTooltipItems: (touchedSpots) {
@@ -1305,7 +1304,7 @@ class SessionDetailsScreen extends StatelessWidget {
                                         style: TextStyle(
                                             color: Color.alphaBlend(
                                                 AppColors.backgroundWhite
-                                                    .withOpacity(0.8),
+                                                    .withAlpha(204),
                                                 Colors.transparent),
                                             fontSize: 10),
                                       ),
@@ -1344,9 +1343,9 @@ class SessionDetailsScreen extends StatelessWidget {
   Widget _buildStatsTable(ThemeData theme, SensorStats stats, Color color) {
     return Container(
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withAlpha(26),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.3), width: 1),
+        border: Border.all(color: color.withAlpha(77), width: 1),
       ),
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
       child: Row(
@@ -1361,7 +1360,7 @@ class SessionDetailsScreen extends StatelessWidget {
           Container(
             width: 1,
             height: 40,
-            color: color.withOpacity(0.3),
+            color: color.withAlpha(77),
           ),
           _buildStatBox(
             theme: theme,
@@ -1372,7 +1371,7 @@ class SessionDetailsScreen extends StatelessWidget {
           Container(
             width: 1,
             height: 40,
-            color: color.withOpacity(0.3),
+            color: color.withAlpha(77),
           ),
           _buildStatBox(
             theme: theme,
@@ -1409,7 +1408,7 @@ class SessionDetailsScreen extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: color.withOpacity(0.2), width: 1),
+            border: Border.all(color: color.withAlpha(51), width: 1),
           ),
           child: Text(
             value.toStringAsFixed(2),

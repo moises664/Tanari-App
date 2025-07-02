@@ -4,8 +4,8 @@ import 'package:tanari_app/src/controllers/services/auth_service.dart';
 import 'package:tanari_app/src/controllers/services/user_profile_service.dart';
 import 'package:logging/logging.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
+import 'package:tanari_app/src/routes/app_pages.dart'; // Importa las rutas para navegación
 
-/// Pantalla de presentación con manejo mejorado de inicialización
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -14,7 +14,9 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  final _logger = Logger('_SplashScreenState');
+  final _logger = Logger('SplashScreen');
+  int _retryCount = 0;
+  final int _maxRetries = 5; // Máximo de reintentos
 
   @override
   void initState() {
@@ -22,28 +24,44 @@ class _SplashScreenState extends State<SplashScreen> {
     _initializeApp();
   }
 
-  /// Secuencia de inicialización mejorada
   Future<void> _initializeApp() async {
-    // Espera a que el framework esté listo
-    await Future.delayed(Duration.zero);
+    await Future.delayed(const Duration(milliseconds: 300));
 
-    // Espera adicional para mostrar el splash
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      // Verificar si AuthService está registrado
+      if (Get.isRegistered<AuthService>()) {
+        final authService = Get.find<AuthService>();
+        final userProfileService = Get.find<UserProfileService>();
 
-    final authService = Get.find<AuthService>();
+        // Verificar sesión activa y cargar perfil
+        if (authService.currentUser.value != null) {
+          await userProfileService
+              .fetchOrCreateUserProfile(authService.currentUser.value!.id);
+          _logger.info('Perfil cargado exitosamente');
+        }
 
-    // Verifica si hay una sesión activa y carga el perfil
-    if (authService.currentUser.value != null) {
-      try {
-        await Get.find<UserProfileService>()
-            .fetchOrCreateUserProfile(authService.currentUser.value!.id);
-        _logger.info('Perfil cargado desde SplashScreen');
-      } catch (e) {
-        _logger.severe('Error cargando perfil en SplashScreen', e);
+        // Navegar a la pantalla adecuada
+        authService.completeAppInitialization();
+      } else {
+        // Reintentar si no está registrado
+        _retryCount++;
+        if (_retryCount <= _maxRetries) {
+          _logger.warning(
+              'AuthService no disponible. Reintento $_retryCount/$_maxRetries');
+          _initializeApp(); // Llamada recursiva
+        } else {
+          _handleInitializationError();
+        }
       }
+    } catch (e, stackTrace) {
+      _logger.severe('Error en inicialización', e, stackTrace);
+      _handleInitializationError();
     }
+  }
 
-    authService.completeAppInitialization();
+  void _handleInitializationError() {
+    _logger.warning('Navegando a pantalla de bienvenida por fallo');
+    Get.offAllNamed(Routes.welcome);
   }
 
   @override

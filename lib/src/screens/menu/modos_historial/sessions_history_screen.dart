@@ -133,7 +133,7 @@ class SessionsHistoryScreen extends StatelessWidget {
                   color: AppColors
                       .backgroundWhite, // Fondo blanco para las tarjetas
                   shadowColor: AppColors.primary
-                      .withOpacity(0.2), // Sombra sutil con el color primario
+                      .withAlpha(51), // Sombra sutil con el color primario
                   child: InkWell(
                     borderRadius: BorderRadius.circular(18),
                     onTap: () {

@@ -88,15 +88,16 @@
             </intent-filter>
             
 
-            <!-- INICIO DEL NUEVO INTENT-FILTER PARA DEEP LINKS DE SUPABASE -->
+            <!-- INICIO DEL NUEVO INTENT-FILTER PARA DEEP LINKS (usando APP_LINKS) DE SUPABASE -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
-                <!-- Define el esquema (scheme) y el host que configuraste en Supabase -->
-                <data android:scheme="tanariapp" android:host="reset-password"/>
+                <!-- Para el deep link personalizado de tu app -->
+                <data android:scheme="tanariapp" />
             </intent-filter>
             <!-- FIN DEL NUEVO INTENT-FILTER -->
+            
 
         </activity>
         <!-- Don't delete the meta-data below.

@@ -334,8 +334,8 @@ class _ModoDPState extends State<ModoMonitoreo> {
                       const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
                   decoration: BoxDecoration(
                     color: isActive
-                        ? AppColors.accentColor.withOpacity(0.15)
-                        : AppColors.secondary1.withOpacity(0.1),
+                        ? AppColors.accentColor.withAlpha(39)
+                        : AppColors.secondary1.withAlpha(26),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: isActive
@@ -471,7 +471,7 @@ class _ModoDPState extends State<ModoMonitoreo> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.3),
+            color: AppColors.primary.withAlpha(77), // Sombra sutil
             blurRadius: 10,
             offset: const Offset(0, 5),
           ),
@@ -592,8 +592,8 @@ class _ModoDPState extends State<ModoMonitoreo> {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: isConnected
-            ? AppColors.accentColor.withOpacity(0.15)
-            : AppColors.error.withOpacity(0.15),
+            ? AppColors.accentColor.withAlpha(38)
+            : AppColors.error.withAlpha(26),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isConnected ? AppColors.accentColor : AppColors.error,
@@ -661,8 +661,8 @@ class _SensorCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: iconColor.withOpacity(
-                  0.15), // Color suave basado en el color del icono
+              color: iconColor
+                  .withAlpha(39), // Color suave basado en el color del icono
               shape: BoxShape.circle,
             ),
             child: Icon(

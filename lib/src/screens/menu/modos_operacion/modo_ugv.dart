@@ -146,7 +146,7 @@ class UgvRoutesScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(18),
                   ),
                   color: AppColors.backgroundWhite,
-                  shadowColor: AppColors.primary.withOpacity(0.2),
+                  shadowColor: AppColors.primary.withAlpha(51),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(18),
                     onTap: () {
@@ -1290,8 +1290,8 @@ class _ModoUgvState extends State<ModoUgv> {
           const EdgeInsets.symmetric(horizontal: 5), // Espacio entre elementos
       decoration: BoxDecoration(
         color: isConnected
-            ? AppColors.accentColor.withOpacity(0.15) // Color de éxito
-            : AppColors.error.withOpacity(0.15), // Color de error
+            ? AppColors.accentColor.withAlpha(515) // Color de éxito
+            : AppColors.error.withAlpha(515), // Color de error
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isConnected ? AppColors.accentColor : AppColors.error,
@@ -1379,7 +1379,7 @@ class _ModoUgvState extends State<ModoUgv> {
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
         margin: const EdgeInsets.symmetric(horizontal: 5),
         decoration: BoxDecoration(
-          color: statusColor.withOpacity(0.15),
+          color: statusColor.withAlpha(515),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: statusColor,
@@ -1580,7 +1580,7 @@ class _ModoUgvState extends State<ModoUgv> {
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.accent.withOpacity(0.3),
+                  color: AppColors.accent.withAlpha(51),
                   blurRadius: 10,
                   offset: const Offset(0, 5),
                 ),
@@ -1651,7 +1651,7 @@ class _ModoUgvState extends State<ModoUgv> {
     return Container(
       decoration: BoxDecoration(
         border: Border.all(
-            color: AppColors.neutral.withOpacity(0.3)), // Color de borde
+            color: AppColors.neutral.withAlpha(51)), // Color de borde
         color: AppColors
             .backgroundLight, // Gris claro más oscuro para el fondo del mapa
         borderRadius: BorderRadius.circular(8),
@@ -1843,7 +1843,7 @@ class _ModoUgvState extends State<ModoUgv> {
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           elevation: 3,
-          shadowColor: bgColor.withOpacity(0.5),
+          shadowColor: bgColor.withAlpha(51),
         ),
         icon: FaIcon(icon, size: 16, color: fgColor),
         label: Text(
@@ -1884,8 +1884,8 @@ class _ModoUgvState extends State<ModoUgv> {
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: AppColors.backgroundBlack
-                  .withOpacity(0.3), // Sombra más oscura
+              color:
+                  AppColors.backgroundBlack.withAlpha(51), // Sombra más oscura
               spreadRadius: 1,
               blurRadius: 8,
               offset: const Offset(0, 4),

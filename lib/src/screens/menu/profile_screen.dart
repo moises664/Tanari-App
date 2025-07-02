@@ -1,23 +1,28 @@
-import 'dart:async'; // Importación necesaria para StreamSubscription
-import 'dart:io';
+// PROFILE SCREEN
+
+import 'dart:async'; // Para manejo de suscripciones
+import 'dart:io'; // Para acceso a archivos
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart'; // Para selección de imágenes
+import 'package:intl/intl.dart'; // Para formateo de fechas
 import 'package:tanari_app/src/controllers/services/auth_service.dart';
 import 'package:tanari_app/src/controllers/services/user_profile_service.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
 import 'package:tanari_app/src/routes/app_pages.dart';
 
-/// Pantalla de perfil de usuario
+/// Pantalla de perfil de usuario - Muestra y permite editar la información del usuario.
 ///
-/// Muestra y permite editar la información del perfil del usuario.
+/// Características principales:
+/// - Visualización de información del perfil (nombre de usuario, email, tipo de cuenta, fecha de registro, biografía).
+/// - Edición de nombre de usuario y biografía.
+/// - Cambio de foto de perfil (subida a Supabase Storage).
+/// - Opciones para cambiar contraseña y cerrar sesión.
 ///
-/// Mejoras de seguridad implementadas:
-///   - Manejo adecuado del ciclo de vida de los controladores
-///   - Cancelación explícita de suscripciones
-///   - Verificación de estado 'mounted' antes de actualizar UI
-///   - Protección contra actualizaciones en widgets eliminados
+/// Mejoras de seguridad y rendimiento implementadas:
+/// - Manejo adecuado del ciclo de vida de los controladores de texto.
+/// - Cancelación explícita de suscripciones para evitar fugas de memoria.
+/// - Verificación de estado `mounted` antes de actualizar la UI después de operaciones asíncronas.
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -26,33 +31,40 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  // Instancias de servicios obtenidas a través de GetX.
   final UserProfileService _profileService = Get.find<UserProfileService>();
-  final _formKey = GlobalKey<FormState>();
+  final AuthService _authService = Get.find<AuthService>();
 
-  // Controladores para campos editables
+  final _formKey =
+      GlobalKey<FormState>(); // Clave para el formulario de edición.
+
+  // Controladores para los campos de texto editables del perfil.
   late TextEditingController _usernameController;
   late TextEditingController _bioController;
 
-  // Estados de la UI
-  bool _isEditing = false;
-  bool _isLoading = false;
-  bool _isUploadingAvatar = false;
+  // Estados de la UI para controlar la interactividad y los indicadores de carga.
+  bool _isEditing = false; // Controla si la pantalla está en modo edición.
+  bool _isLoading = false; // Indicador de carga para operaciones de guardado.
+  bool _isUploadingAvatar = false; // Indicador de carga para subida de avatar.
 
-  // Suscripción para escuchar cambios en el perfil
+  // Suscripción para escuchar cambios en el perfil del usuario.
   late StreamSubscription _profileSubscription;
 
   @override
   void initState() {
     super.initState();
 
-    // Inicializar controladores
+    // Inicializar controladores con valores vacíos. Se actualizarán con los datos del perfil
+    // una vez que el listener de `currentProfile` se active.
     _usernameController = TextEditingController();
     _bioController = TextEditingController();
 
-    // Configurar listener para cambios en el perfil
-    // IMPORTANTE: Guardar la suscripción para poder cancelarla después
+    // Configurar un listener para reaccionar a los cambios en el perfil del usuario.
+    // Esto asegura que la UI se actualice automáticamente si el perfil cambia
+    // (ej. por una actualización desde otra parte de la app o el servidor).
     _profileSubscription = _profileService.currentProfile.listen((profile) {
-      // Verificar que el widget aún esté montado antes de actualizar UI
+      // Actualizar la UI solo si el widget está montado y no estamos en medio de una edición
+      // (para evitar sobrescribir los campos mientras el usuario está escribiendo).
       if (mounted && !_isEditing && profile != null) {
         _usernameController.text = profile.username;
         _bioController.text = profile.bio ?? '';
@@ -62,20 +74,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
-    // PASO CRÍTICO: Cancelar la suscripción cuando el widget se elimina
+    // CRÍTICO: Cancelar la suscripción para evitar fugas de memoria.
     _profileSubscription.cancel();
 
-    // Eliminar controladores para liberar recursos
+    // Liberar los recursos de los controladores de texto.
     _usernameController.dispose();
     _bioController.dispose();
 
     super.dispose();
   }
 
-  /// Alterna entre modo de visualización y edición
+  /// Alterna entre el modo de visualización y el modo de edición del perfil.
+  /// Cuando se entra en modo edición, los campos de texto se precargan con los datos actuales.
   void _toggleEditing() {
     setState(() {
       _isEditing = !_isEditing;
+      // Al entrar en modo edición, cargar los datos actuales del perfil en los controladores.
       if (_isEditing) {
         final profile = _profileService.currentProfile.value;
         if (profile != null) {
@@ -86,65 +100,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
-  /// Guarda los cambios realizados en el perfil
+  /// Guarda los cambios realizados en el perfil del usuario.
+  ///
+  /// Valida el formulario y llama a `updateProfile` de [UserProfileService].
   Future<void> _saveChanges() async {
+    // Validar el formulario antes de intentar guardar los cambios.
     if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
+      setState(() => _isLoading = true); // Activar indicador de carga.
       try {
         final userId = _profileService.currentProfile.value!.id;
         await _profileService.updateProfile(
           userId: userId,
-          username: _usernameController.text,
-          bio: _bioController.text,
+          username: _usernameController.text.trim(),
+          bio: _bioController.text.trim(),
         );
-        _toggleEditing();
-        Get.snackbar(
-          'Éxito',
-          'Perfil actualizado correctamente',
-          backgroundColor: AppColors.success,
-          colorText: AppColors.backgroundWhite,
-        );
+        _toggleEditing(); // Salir del modo edición después de guardar.
+        // El snackbar de éxito se muestra desde UserProfileService.
       } catch (e) {
-        Get.snackbar(
-          'Error',
-          'No se pudo actualizar el perfil: $e',
-          backgroundColor: AppColors.error,
-          colorText: AppColors.backgroundWhite,
-        );
+        // El snackbar de error se muestra desde UserProfileService.
+        _profileService.currentProfile
+            .refresh(); // Forzar refresco si hubo error.
       } finally {
-        setState(() => _isLoading = false);
+        if (mounted) {
+          setState(() => _isLoading = false); // Desactivar indicador de carga.
+        }
       }
     }
   }
 
-  /// Selecciona una imagen de la galería y la sube como avatar
+  /// Permite al usuario seleccionar una imagen de la galería y la sube como avatar.
+  ///
+  /// Utiliza `image_picker` para la selección y `UserProfileService` para la subida.
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
 
     if (image != null && mounted) {
-      setState(() => _isUploadingAvatar = true);
+      setState(() =>
+          _isUploadingAvatar = true); // Activar indicador de carga de avatar.
       try {
         final userId = _profileService.currentProfile.value!.id;
+        // La subida del avatar también actualiza el perfil con la nueva URL.
         await _profileService.uploadAvatar(
             userId: userId, imageFile: File(image.path));
-
-        Get.snackbar(
-          'Éxito',
-          'Foto de perfil actualizada.',
-          backgroundColor: AppColors.success,
-          colorText: AppColors.backgroundWhite,
-        );
+        // El snackbar de éxito se muestra desde UserProfileService.
       } catch (e) {
-        Get.snackbar(
-          'Error',
-          'No se pudo subir la foto: $e',
-          backgroundColor: AppColors.error,
-          colorText: AppColors.backgroundWhite,
-        );
+        // El snackbar de error se muestra desde UserProfileService.
       } finally {
         if (mounted) {
-          setState(() => _isUploadingAvatar = false);
+          setState(() => _isUploadingAvatar = false); // Desactivar indicador.
         }
       }
     }
@@ -166,34 +170,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
         actions: [
+          // Botón de editar/cerrar en la AppBar, visible solo si hay un perfil cargado.
           Obx(() {
             if (_profileService.currentProfile.value != null) {
               return IconButton(
                 icon: Icon(
-                  _isEditing ? Icons.close : Icons.edit,
+                  _isEditing
+                      ? Icons.close
+                      : Icons.edit, // Icono cambia según el modo.
                   color: AppColors.primary,
                 ),
-                onPressed: _toggleEditing,
+                onPressed: _toggleEditing, // Alternar modo edición.
               );
             }
-            return const SizedBox.shrink();
+            return const SizedBox.shrink(); // No mostrar nada si no hay perfil.
           }),
         ],
       ),
       body: Obx(() {
+        // Mostrar un indicador de carga mientras el perfil se está obteniendo.
         if (_profileService.currentProfile.value == null) {
-          return Center(
+          return const Center(
             child: CircularProgressIndicator(
               color: AppColors.primary,
             ),
           );
         }
 
-        final profile = _profileService.currentProfile.value!;
+        final profile =
+            _profileService.currentProfile.value!; // Obtener el perfil actual.
 
         return Stack(
           children: [
-            // Fondo decorativo
+            // Fondo decorativo en la parte superior de la pantalla.
             Positioned(
               top: 0,
               left: 0,
@@ -203,8 +212,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      AppColors.primary.withOpacity(0.9),
-                      AppColors.secondary.withOpacity(0.7),
+                      AppColors.primary.withAlpha(230),
+                      AppColors.secondary.withAlpha(179),
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -217,38 +226,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
 
-            // Contenido principal
+            // Contenido principal del perfil, envuelto en un SingleChildScrollView
+            // para permitir el desplazamiento si el contenido es demasiado largo.
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: SingleChildScrollView(
                 child: Column(
                   children: [
-                    const SizedBox(height: 80),
+                    const SizedBox(height: 80), // Espacio para el avatar.
 
-                    // Avatar
+                    // Área del avatar con botón de cámara en modo edición.
                     Center(
                       child: Stack(
                         alignment: Alignment.bottomRight,
                         children: [
+                          // Contenedor para el avatar con sombra.
                           Container(
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppColors.primary.withOpacity(0.4),
+                                  color: AppColors.primary.withAlpha(102),
                                   blurRadius: 20,
                                   spreadRadius: 3,
                                 ),
                               ],
                             ),
+                            // Avatar circular del usuario.
                             child: CircleAvatar(
                               radius: 70,
                               backgroundColor: AppColors.backgroundWhite,
                               backgroundImage: profile.avatarUrl != null
-                                  ? NetworkImage(profile.avatarUrl!)
+                                  ? NetworkImage(_profileService
+                                      .getAvatarUrl(profile.avatarUrl))
                                   : null,
                               child: profile.avatarUrl == null
-                                  ? Icon(
+                                  ? const Icon(
                                       Icons.person,
                                       size: 70,
                                       color: AppColors.textSecondary,
@@ -256,15 +269,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   : null,
                             ),
                           ),
+                          // Botón de cámara (solo visible en modo edición).
                           if (_isEditing)
                             Positioned(
                               right: 0,
                               bottom: 0,
                               child: _isUploadingAvatar
                                   ? CircularProgressIndicator(
-                                      color: AppColors.accent)
+                                      color: AppColors
+                                          .accent) // Indicador de carga.
                                   : GestureDetector(
-                                      onTap: _pickImage,
+                                      onTap:
+                                          _pickImage, // Abrir selector de imagen.
                                       child: Container(
                                         padding: const EdgeInsets.all(8),
                                         decoration: BoxDecoration(
@@ -274,7 +290,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                               color: AppColors.backgroundWhite,
                                               width: 2),
                                         ),
-                                        child: Icon(
+                                        child: const Icon(
                                           Icons.camera_alt,
                                           color: AppColors.backgroundWhite,
                                           size: 24,
@@ -287,7 +303,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Información de usuario
+                    // Información básica del usuario (nombre y email).
                     Text(
                       profile.username,
                       style: const TextStyle(
@@ -306,7 +322,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 30),
 
-                    // Tarjeta de información
+                    // Tarjeta de información con detalles adicionales del perfil.
                     Card(
                       elevation: 6,
                       shape: RoundedRectangleBorder(
@@ -335,11 +351,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             const Divider(
                                 color: AppColors.neutralLight, height: 10),
+                            // Mostrar fecha de actualización si existe.
+                            if (profile.updatedAt != null) ...[
+                              _buildProfileItem(
+                                icon: Icons.update,
+                                title: 'Última actualización',
+                                value: DateFormat('dd/MM/yyyy HH:mm')
+                                    .format(profile.updatedAt!),
+                                iconColor: AppColors.success,
+                              ),
+                              const Divider(
+                                  color: AppColors.neutralLight, height: 10),
+                            ],
                             if (profile.bio != null &&
                                 profile.bio!.isNotEmpty) ...[
                               _buildProfileItem(
                                 icon: Icons.info,
-                                title: 'Biografía',
+                                title: 'Información adicional',
                                 value: profile.bio!,
                                 iconColor: AppColors.primary,
                               ),
@@ -352,7 +380,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Sección de edición
+                    // Sección de edición (solo visible en modo edición).
                     if (_isEditing) ...[
                       Card(
                         elevation: 4,
@@ -365,6 +393,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             key: _formKey,
                             child: Column(
                               children: [
+                                // Campo de texto para el nombre de usuario.
                                 TextFormField(
                                   controller: _usernameController,
                                   decoration: InputDecoration(
@@ -395,16 +424,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ),
                                   validator: (value) {
                                     if (value == null || value.isEmpty) {
-                                      return 'Por favor ingresa un nombre de usuario';
+                                      return 'Por favor, ingresa un nombre de usuario.';
                                     }
                                     return null;
                                   },
                                 ),
                                 const SizedBox(height: 16),
+
+                                // Campo de texto para la biografía.
                                 TextFormField(
                                   controller: _bioController,
                                   decoration: InputDecoration(
-                                    labelText: 'Biografía',
+                                    labelText: 'Información adicional',
                                     labelStyle: const TextStyle(
                                       color: AppColors.textSecondary,
                                     ),
@@ -432,6 +463,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 20),
+
+                                // Botón para guardar los cambios.
                                 SizedBox(
                                   width: double.infinity,
                                   child: ElevatedButton(
@@ -472,7 +505,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(height: 20),
                     ],
 
-                    // Botones de acción
+                    // Botones de acción (solo visibles fuera del modo edición).
                     if (!_isEditing) ...[
                       _buildActionButton(
                         icon: Icons.camera_alt,
@@ -492,7 +525,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         icon: Icons.logout,
                         text: 'Cerrar Sesión',
                         color: AppColors.error,
-                        onPressed: () => Get.find<AuthService>().signOut(),
+                        onPressed: () => _authService
+                            .signOut(), // Llama a signOut de AuthService.
                       ),
                       const SizedBox(height: 20),
                     ]
@@ -506,7 +540,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// Construye un elemento de información del perfil
+  /// Construye un elemento de información del perfil con un icono, título y valor.
   Widget _buildProfileItem({
     required IconData icon,
     required String title,
@@ -552,7 +586,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// Construye un botón de acción grande
+  /// Construye un botón de acción grande con un icono, texto y color.
   Widget _buildActionButton({
     required IconData icon,
     required String text,
@@ -583,7 +617,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// Navega a la pantalla de cambio de contraseña
+  /// Navega a la pantalla de cambio de contraseña.
   void _changePassword() {
     Get.toNamed(Routes.changePassword, arguments: {'fromRecovery': false});
   }

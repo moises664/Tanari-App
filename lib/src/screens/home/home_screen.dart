@@ -1,3 +1,4 @@
+import 'dart:io'; // Para usar exit(0) al cerrar la aplicación
 import 'package:flutter/material.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:tanari_app/src/controllers/services/auth_service.dart';
@@ -11,6 +12,10 @@ import 'package:tanari_app/src/screens/menu/modos_operacion/modo_monitoreo.dart'
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_ugv.dart';
 import 'package:tanari_app/src/screens/menu/profile_screen.dart';
 
+/// Pantalla principal de la aplicación que actúa como contenedor de las diferentes secciones.
+///
+/// Utiliza un [Scaffold] con un [Drawer] para el menú lateral y una barra de navegación inferior personalizada.
+/// También maneja la lógica de cierre de sesión y la confirmación al salir de la aplicación.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -22,9 +27,13 @@ class _HomeScreenState extends State<HomeScreen> {
   final AuthService _authService = Get.find<AuthService>();
   final UserProfileService _userProfileService = Get.find<UserProfileService>();
 
+  // Clave para el Scaffold, permite controlar el drawer
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  // Índice actual de la pantalla en la barra de navegación inferior
   int _selectedIndex = 0;
 
+  // Lista de widgets que representan las diferentes pantallas de la aplicación
   final List<Widget> _widgetOptions = <Widget>[
     const HomeTab(),
     const ModoMonitoreo(),
@@ -33,6 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const ProfileScreen()
   ];
 
+  /// Maneja el cambio de índice en la barra de navegación inferior
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
@@ -42,7 +52,9 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
+      // Evita que el usuario salga de la pantalla sin confirmación
       canPop: false,
+      // Callback que se invoca cuando el usuario intenta salir (ej. botón de retroceso)
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
 
@@ -57,12 +69,21 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: const Text('No'),
               ),
               TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
+                onPressed: () {
+                  // Cerrar sesión y luego salir de la aplicación
+                  Navigator.of(context).pop(true);
+                  Get.find<AuthService>().signOut();
+                },
                 child: const Text('Sí'),
               ),
             ],
           ),
         );
+
+        // Si el usuario confirma, cerrar completamente la aplicación
+        if (shouldExit == true) {
+          exit(0);
+        }
       },
       child: Scaffold(
         key: _scaffoldKey,
@@ -86,14 +107,20 @@ class _HomeScreenState extends State<HomeScreen> {
           foregroundColor: AppColors.textPrimary,
           automaticallyImplyLeading: true,
         ),
+        // Menú lateral (Drawer)
         drawer: _buildMenuDrawer(context),
+        // Barra de navegación inferior personalizada
         bottomNavigationBar: _buildCustomBottomNavigationBar(context),
         backgroundColor: Colors.white,
+        // Cuerpo: muestra la pantalla correspondiente al índice seleccionado
         body: _widgetOptions.elementAt(_selectedIndex),
       ),
     );
   }
 
+  /// Construye la barra de navegación inferior personalizada
+  ///
+  /// Retorna un [SafeArea] que contiene un contenedor con diseño personalizado
   Widget _buildCustomBottomNavigationBar(BuildContext context) {
     return SafeArea(
       child: Container(
@@ -128,6 +155,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Construye un elemento de la barra de navegación inferior
+  ///
+  /// [index]: Índice del elemento
+  /// [icon]: Icono a mostrar
+  /// [label]: Texto descriptivo
   Widget _buildNavItem(int index, IconData icon, String label) {
     final bool isSelected = _selectedIndex == index;
     return GestureDetector(
@@ -161,6 +193,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Construye el menú lateral (Drawer)
+  ///
+  /// Contiene:
+  /// - Cabecera con información del usuario
+  /// - Sección de modos de operación
+  /// - Historial
+  /// - Comunicación BLE
+  /// - Acerca de
+  /// - Opción para cerrar sesión
   Drawer _buildMenuDrawer(BuildContext context) => Drawer(
         backgroundColor: Colors.white,
         child: ListView(
@@ -190,14 +231,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   accountEmail: Text(
                     userProfile?.email ?? user?.email ?? 'correo@ejemplo.com',
                     style: TextStyle(
-                      color: AppColors.backgroundWhite.withOpacity(0.8),
+                      color: AppColors.backgroundWhite.withAlpha(204),
                     ),
                   ),
                   currentAccountPicture: CircleAvatar(
                     backgroundColor: AppColors.primary,
                     backgroundImage: (userProfile?.avatarUrl != null &&
                             userProfile!.avatarUrl!.isNotEmpty)
-                        ? NetworkImage(userProfile.avatarUrl!) as ImageProvider
+                        ? NetworkImage(_userProfileService.getAvatarUrl(
+                            userProfile.avatarUrl)) as ImageProvider
                         : null,
                     child: (userProfile?.avatarUrl == null ||
                             userProfile!.avatarUrl!.isEmpty)
@@ -304,6 +346,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: TextStyle(color: AppColors.textPrimary)),
               onTap: () async {
                 _scaffoldKey.currentState?.closeDrawer();
+                // Cierra sesión usando el servicio de autenticación
                 await _authService.signOut();
               },
             ),

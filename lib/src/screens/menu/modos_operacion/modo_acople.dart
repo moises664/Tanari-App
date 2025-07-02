@@ -522,8 +522,8 @@ class _ModoAcopleState extends State<ModoAcople> {
                       const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
                   decoration: BoxDecoration(
                     color: isActive
-                        ? AppColors.accentColor.withOpacity(0.15)
-                        : AppColors.secondary1.withOpacity(0.1),
+                        ? AppColors.accentColor.withAlpha(39)
+                        : AppColors.secondary1.withAlpha(26),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: isActive
@@ -630,8 +630,8 @@ class _ModoAcopleState extends State<ModoAcople> {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: isConnected
-            ? AppColors.accentColor.withOpacity(0.15)
-            : AppColors.error.withOpacity(0.15),
+            ? AppColors.accentColor.withAlpha(39)
+            : AppColors.error.withAlpha(39),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: isConnected ? AppColors.accentColor : AppColors.error,
@@ -845,7 +845,7 @@ class _ModoAcopleState extends State<ModoAcople> {
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           elevation: 5,
-          shadowColor: buttonColor.withOpacity(0.5),
+          shadowColor: buttonColor.withAlpha(128),
         ),
         icon: FaIcon(icon, size: 20, color: fgColor),
         label: Text(
@@ -941,7 +941,7 @@ class _ModoAcopleState extends State<ModoAcople> {
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: AppColors.backgroundBlack.withOpacity(0.3),
+              color: AppColors.backgroundBlack.withAlpha(77),
               spreadRadius: 1,
               blurRadius: 6,
               offset: const Offset(0, 3),
