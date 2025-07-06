@@ -1,89 +1,81 @@
-// USER PROFILE
+// user_profile.dart
 
-/// Clase de modelo [UserProfile] que representa la estructura de un perfil de usuario
-/// almacenado en la tabla `public.profiles` de Supabase.
-///
-/// Incluye campos como ID, nombre de usuario, correo electrónico, estado de administrador,
-/// fecha de creación, fecha de última actualización, URL del avatar y biografía.
+/// Modelo de datos para el perfil de usuario.
+/// Representa la estructura de la tabla 'profiles' en Supabase.
 class UserProfile {
   final String id;
   final String username;
   final String email;
-  final bool isAdmin;
-  final DateTime createdAt;
-  final DateTime?
-      updatedAt; // Nuevo campo: fecha de última actualización (opcional)
   final String? avatarUrl;
   final String? bio;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final bool isAdmin; // Nueva columna para el rol de administrador
 
-  /// Constructor para crear una instancia de [UserProfile].
   UserProfile({
     required this.id,
     required this.username,
     required this.email,
-    required this.isAdmin,
-    required this.createdAt,
-    this.updatedAt, // El campo updatedAt es opcional
     this.avatarUrl,
     this.bio,
+    required this.createdAt,
+    this.updatedAt,
+    this.isAdmin = false, // Valor por defecto
   });
 
-  /// Factory constructor para crear una instancia de [UserProfile] desde un mapa (JSON).
-  ///
-  /// Realiza el mapeo de los nombres de las columnas de la base de datos a los nombres
-  /// de las propiedades del modelo.
-  factory UserProfile.fromMap(Map<String, dynamic> map) {
+  /// Crea una instancia de [UserProfile] desde un mapa JSON.
+  factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
-      id: map['id'] as String,
-      username: map['username'] as String,
-      email: map['email'] as String,
-      isAdmin:
-          map['is_admin'] as bool? ?? false, // Valor por defecto si es nulo
-      createdAt: DateTime.parse(map['created_at'] as String),
-      updatedAt: map['updated_at'] != null // Mapear updatedAt si existe
-          ? DateTime.parse(map['updated_at'] as String)
+      id: json['id'] as String,
+      username: json['username'] as String,
+      email: json['email'] as String,
+      avatarUrl: json['avatar_url'] as String?,
+      bio: json['bio'] as String?,
+      createdAt: DateTime.parse(json['created_at'] as String),
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'] as String)
           : null,
-      avatarUrl: map['avatar_url'] as String?,
-      bio: map['bio'] as String?,
+      isAdmin: json['is_admin'] as bool? ??
+          false, // Asegura que sea un booleano, con default false
     );
   }
 
   /// Convierte la instancia actual de [UserProfile] en un mapa (JSON) para su almacenamiento
   /// en la base de datos.
-  Map<String, dynamic> toMap() {
+  Map<String, dynamic> toJson() {
     return {
       'id': id,
       'username': username,
       'email': email,
-      'is_admin': isAdmin,
-      'created_at': createdAt.toIso8601String(),
-      'updated_at':
-          updatedAt?.toIso8601String(), // Incluir updatedAt en el mapa
       'avatar_url': avatarUrl,
       'bio': bio,
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt?.toIso8601String(),
+      'is_admin': isAdmin,
     };
   }
 
   /// Crea una nueva instancia de [UserProfile] copiando los valores de la instancia actual,
   /// permitiendo sobrescribir propiedades específicas.
   UserProfile copyWith({
+    String? id,
     String? username,
     String? email,
-    bool? isAdmin,
-    DateTime? createdAt,
-    DateTime? updatedAt, // Permitir copiar updatedAt
     String? avatarUrl,
     String? bio,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    bool? isAdmin,
   }) {
     return UserProfile(
-      id: id,
+      id: id ?? this.id,
       username: username ?? this.username,
       email: email ?? this.email,
-      isAdmin: isAdmin ?? this.isAdmin,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt, // Copiar updatedAt
       avatarUrl: avatarUrl ?? this.avatarUrl,
       bio: bio ?? this.bio,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      isAdmin: isAdmin ?? this.isAdmin,
     );
   }
 }

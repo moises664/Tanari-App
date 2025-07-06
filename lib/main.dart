@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:logging/logging.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tanari_app/src/controllers/bluetooth/ble.controller.dart';
+import 'package:tanari_app/src/controllers/services/admin_services.dart';
 import 'package:tanari_app/src/controllers/services/auth_service.dart';
 import 'package:tanari_app/src/controllers/services/operation_data_service.dart';
 import 'package:tanari_app/src/controllers/services/user_profile_service.dart';
@@ -93,7 +94,10 @@ void _initializeDependencies() {
   // 3. Registrar AuthService. Depende de SupabaseClient y UserProfileService.
   Get.put(AuthService(), permanent: true);
 
-  // 4. Registrar otros servicios de la aplicación.
+  // 4. Registrar AdminService. Depende de SupabaseClient y UserProfileService.
+  Get.put(AdminService(), permanent: true); // <--- Nuevo servicio
+
+  // 5. Registrar otros servicios de la aplicación.
   Get.put(BleController(), permanent: true);
   Get.put(OperationDataService(), permanent: true);
   Get.put(UgvService(), permanent: true);

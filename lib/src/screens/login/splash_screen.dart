@@ -1,3 +1,5 @@
+// SPLASH SCREEN
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:tanari_app/src/controllers/services/auth_service.dart';

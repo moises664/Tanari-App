@@ -13,6 +13,7 @@ import 'package:tanari_app/src/screens/menu/modos_operacion/modo_acople.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_monitoreo.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_ugv.dart';
 import 'package:tanari_app/src/screens/menu/profile_screen.dart';
+import 'package:tanari_app/src/screens/menu/roles/admin_screen.dart';
 
 /// Nombres de rutas abstractos para la aplicación
 ///
@@ -35,6 +36,7 @@ abstract class Routes {
   static const String modoAcople = '/modoAcople';
   static const String modoMonitoreo = '/modoMonitoreo';
   static const String modoUgv = '/modoUgv';
+  static const adminPanel = '/admin-panel';
 }
 
 /// Configuración de rutas de la aplicación
@@ -113,6 +115,11 @@ class AppPages {
     GetPage(
       name: Routes.modoUgv,
       page: () => const ModoUgv(),
+      transition: Transition.fadeIn,
+    ),
+    GetPage(
+      name: Routes.adminPanel,
+      page: () => const AdminScreen(),
       transition: Transition.fadeIn,
     ),
   ];

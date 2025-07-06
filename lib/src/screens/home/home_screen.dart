@@ -1,3 +1,6 @@
+//HOME SCREEN
+//PANTALLA PRINCIPAL
+
 import 'dart:io'; // Para usar exit(0) al cerrar la aplicación
 import 'package:flutter/material.dart';
 import 'package:icons_plus/icons_plus.dart';
@@ -11,6 +14,7 @@ import 'package:tanari_app/src/screens/menu/historial_app.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_monitoreo.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_ugv.dart';
 import 'package:tanari_app/src/screens/menu/profile_screen.dart';
+import 'package:tanari_app/src/screens/menu/roles/admin_screen.dart'; // Importar pantalla de admin
 
 /// Pantalla principal de la aplicación que actúa como contenedor de las diferentes secciones.
 ///
@@ -202,6 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// - Comunicación BLE
   /// - Acerca de
   /// - Opción para cerrar sesión
+  /// - Panel de administración (solo visible para usuarios administradores)
   Drawer _buildMenuDrawer(BuildContext context) => Drawer(
         backgroundColor: Colors.white,
         child: ListView(
@@ -338,6 +343,29 @@ class _HomeScreenState extends State<HomeScreen> {
                 Get.toNamed(Routes.acercaApp);
               },
             ),
+
+            // PANEL DE ADMINISTRACIÓN (solo visible para administradores)
+            // Usamos Obx para reaccionar a cambios en el estado del perfil
+            Obx(() {
+              final currentProfile = _userProfileService.currentProfile.value;
+              // Verificamos si el usuario actual es administrador
+              if (currentProfile != null && currentProfile.isAdmin) {
+                return ListTile(
+                  leading: const Icon(Icons.admin_panel_settings,
+                      color: AppColors.textPrimary),
+                  title: const Text('Panel de Administración',
+                      style: TextStyle(color: AppColors.textPrimary)),
+                  onTap: () {
+                    _scaffoldKey.currentState?.closeDrawer();
+                    // Navegamos a la pantalla de administración
+                    Get.to(() => const AdminScreen());
+                  },
+                );
+              } else {
+                // Si no es administrador, no mostramos nada
+                return const SizedBox.shrink();
+              }
+            }),
 
             // CERRAR SESIÓN
             ListTile(

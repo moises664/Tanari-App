@@ -313,7 +313,7 @@ class AuthService extends GetxService {
   Future<void> signIn(String email, String password) async {
     isLoading.value = true;
     int attempt = 0;
-    const int maxAttempts = 3; // Número máximo de reintentos
+    const int maxAttempts = 3;
     try {
       while (attempt < maxAttempts) {
         try {
@@ -325,7 +325,7 @@ class AuthService extends GetxService {
             email: email,
             password: password,
           )
-              .timeout(const Duration(seconds: 30), onTimeout: () {
+              .timeout(const Duration(seconds: 60), onTimeout: () {
             throw AuthException('Tiempo de espera agotado al iniciar sesión.');
           });
 
@@ -334,34 +334,44 @@ class AuthService extends GetxService {
                 'Credenciales inválidas o usuario no encontrado.');
           }
 
+          // Verificar si el perfil existe y crear si es necesario
+          try {
+            await _userProfileService
+                .fetchOrCreateUserProfile(response.user!.id);
+            _logger.info('Perfil del usuario cargado/creado exitosamente.');
+          } catch (e, stackTrace) {
+            _logger.severe(
+                'Error al cargar o crear el perfil del usuario', e, stackTrace);
+            throw AuthException('Error al inicializar el perfil de usuario');
+          }
+
           _logger.info('Usuario ${response.user!.email} autenticado.');
-          return; // Salir del método si es exitoso
+          return;
         } on AuthException catch (e, stackTrace) {
-          // Si es un error de autenticación, lo manejamos y re-lanzamos para salir del bucle.
-          _handleAuthError('Error en inicio de sesión', e, stackTrace);
-          rethrow;
+          if (attempt == maxAttempts - 1) {
+            _handleAuthError('Error en inicio de sesión', e, stackTrace);
+          }
         } on TimeoutException catch (e) {
           _logger.warning('Timeout en intento ${attempt + 1}: $e');
+          if (attempt == maxAttempts - 1) {
+            rethrow;
+          }
         } catch (e, stackTrace) {
-          // Manejar errores de conexión específicos que podrían justificar un reintento.
           if (e.toString().contains('Connection reset by peer') ||
               e.toString().contains('SocketException')) {
             _logger.warning(
                 'Error de conexión en intento ${attempt + 1}. Reintentando...');
           } else {
-            // Para otros errores inesperados, manejar y re-lanzar.
             _handleGenericError(
                 'Error inesperado al iniciar sesión', e, stackTrace);
             rethrow;
           }
         }
 
-        // Esperar un breve período antes de reintentar.
-        await Future.delayed(const Duration(seconds: 2));
+        await Future.delayed(const Duration(seconds: 3));
         attempt++;
       }
 
-      // Si todos los intentos fallan, mostrar un error persistente.
       if (attempt == maxAttempts) {
         _handleAuthError(
           'Error persistente',
@@ -371,8 +381,7 @@ class AuthService extends GetxService {
         );
       }
     } finally {
-      isLoading.value =
-          false; // Asegurar que el indicador de carga se desactive.
+      isLoading.value = false;
     }
   }
 

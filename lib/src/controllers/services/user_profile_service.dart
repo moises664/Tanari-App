@@ -1,48 +1,37 @@
-// USER PROFILE SERVICE
+// user_profile_service.dart (Versión corregida y optimizada)
 
+import 'dart:async';
+import 'dart:io';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:logging/logging.dart'; // Asegúrate de usar este import para Logger
 import 'package:tanari_app/src/core/app_colors.dart';
-import 'package:tanari_app/src/models/user_profile.dart';
-import 'dart:io';
-import 'package:path/path.dart' as p;
-import 'package:logging/logging.dart';
+import 'package:tanari_app/src/models/user_profile.dart'; // Asegúrate de que esta ruta sea correcta
+import 'package:path/path.dart' as p; // Para manipulación de rutas de archivos
 
-/// Excepción personalizada para errores relacionados con perfiles de usuario.
-class ProfileException implements Exception {
-  final String message;
-  ProfileException(this.message);
+/// Logger para la clase UserProfileService.
+final _logger = Logger('UserProfileService');
 
-  @override
-  String toString() => 'ProfileException: $message';
-}
-
-/// [UserProfileService] es un servicio de GetX que gestiona todas las operaciones
-/// relacionadas con los perfiles de usuario en la base de datos de Supabase.
-/// Esto incluye la carga, actualización y subida de avatares.
-///
-/// Este servicio se basa en que la creación inicial del perfil para nuevos usuarios
-/// es manejada por un trigger de base de datos en Supabase, no por la aplicación cliente.
+/// [UserProfileService] es un servicio de GetX que gestiona la información
+/// del perfil del usuario, incluyendo la carga, actualización y gestión de avatares.
 class UserProfileService extends GetxService {
-  late final SupabaseClient _supabase;
-  final Logger _logger = Logger('UserProfileService');
+  late final SupabaseClient _supabaseClient;
 
-  /// Perfil de usuario actual, observable para que los widgets puedan reaccionar a los cambios.
-  final Rx<UserProfile?> currentProfile = Rx<UserProfile?>(null);
+  // Observable para el perfil del usuario actualmente autenticado.
+  final Rxn<UserProfile> currentProfile = Rxn<UserProfile>();
+  final RxBool isLoadingProfile = false.obs;
+
+  // Suscripción para escuchar cambios en el perfil en tiempo real.
+  StreamSubscription<List<Map<String, dynamic>>>? _profileStreamSubscription;
 
   @override
   void onInit() {
     super.onInit();
-    _logger.info('UserProfileService inicializando...');
-
-    // Obtener la instancia de SupabaseClient inyectada por GetX.
-    _supabase = Get.find<SupabaseClient>();
-    _logger.info('UserProfileService dependencias encontradas.');
+    _supabaseClient = Get.find<SupabaseClient>();
+    _logger.info('UserProfileService inicializado.');
 
     // Escuchar cambios de estado de autenticación para cargar el perfil automáticamente.
-    // Esto asegura que el perfil se cargue cada vez que un usuario inicia sesión
-    // o cuando se detecta una sesión inicial.
-    _supabase.auth.onAuthStateChange.listen((data) async {
+    _supabaseClient.auth.onAuthStateChange.listen((data) async {
       final event = data.event;
       final session = data.session;
 
@@ -50,230 +39,325 @@ class UserProfileService extends GetxService {
           event == AuthChangeEvent.initialSession ||
           event == AuthChangeEvent.userUpdated) {
         if (session?.user != null) {
-          // Intentar cargar o crear el perfil.
-          // La creación es un fallback si el trigger del servidor falló.
           await fetchOrCreateUserProfile(session!.user!.id);
         }
       } else if (event == AuthChangeEvent.signedOut) {
-        // Limpiar el perfil si el usuario cierra sesión.
         currentProfile.value = null;
+        _profileStreamSubscription
+            ?.cancel(); // Cancelar la suscripción al cerrar sesión
         _logger.info('Perfil limpiado tras cierre de sesión.');
       }
     });
   }
 
-  /// Busca el perfil de un usuario por su ID.
-  ///
-  /// **Este método asume que el perfil ya ha sido creado por un trigger
-  /// del lado del servidor (`on_auth_user_created`) cuando el usuario se registra.**
-  /// Si el perfil no se encuentra (lo cual sería una anomalía), este método
-  /// intentará crearlo como un mecanismo de respaldo.
-  ///
-  /// Parámetros:
-  /// - `userId`: El ID único del usuario (generalmente el `id` de `auth.users`).
-  Future<void> fetchOrCreateUserProfile(String userId) async {
-    _logger.info('Intentando cargar o crear perfil para ID: $userId');
-    try {
-      // Intentar obtener el perfil existente.
-      final response =
-          await _supabase.from('profiles').select().eq('id', userId).single();
-      currentProfile.value = UserProfile.fromMap(response);
-      _logger.info('Perfil cargado: ${currentProfile.value?.username}');
-    } on PostgrestException catch (e, stackTrace) {
-      if (e.code == 'PGRST116') {
-        // Código PGRST116 indica que no se encontró la fila.
-        _logger.warning(
-            'Perfil no encontrado para $userId. Intentando crearlo como fallback...');
-        try {
-          final user = _supabase.auth.currentUser;
-          if (user == null) {
-            throw ProfileException(
-                'Usuario autenticado no encontrado para crear perfil de fallback.');
-          }
-
-          // Preparar datos mínimos para la creación del perfil.
-          // El `username` se intenta obtener de la metadata del usuario de auth,
-          // si no está, se usa una parte del email o un valor por defecto.
-          final newProfileData = {
-            'id': user.id,
-            'email': user.email,
-            'username': user.userMetadata?['username'] ??
-                user.email?.split('@')[0] ??
-                'usuario_tanari',
-            'is_admin': false,
-            // 'created_at' y 'updated_at' serán manejados por los defaults/triggers de la DB.
-          };
-
-          final insertResponse = await _supabase
-              .from('profiles')
-              .insert(newProfileData)
-              .select()
-              .single();
-          currentProfile.value = UserProfile.fromMap(insertResponse);
-          _logger.info('Perfil de fallback creado y cargado para $userId.');
-          Get.snackbar(
-            'Perfil Creado',
-            'Tu perfil ha sido creado exitosamente.',
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: AppColors.success,
-            colorText: AppColors.backgroundWhite,
-          );
-        } catch (insertE, insertStackTrace) {
-          _logger.severe(
-              'Error al crear perfil de fallback para $userId: $insertE',
-              insertE,
-              insertStackTrace);
-          Get.snackbar('Error', 'Error al crear perfil: ${insertE.toString()}',
-              snackPosition: SnackPosition.BOTTOM,
-              backgroundColor: AppColors.error,
-              colorText: AppColors.backgroundWhite);
-          throw ProfileException(
-              'No se pudo crear el perfil: ${insertE.toString()}');
-        }
-      } else {
-        // Otros errores de Postgrest.
-        _logger.severe(
-            'Error de Postgrest al cargar perfil para $userId: ${e.message}',
-            e,
-            stackTrace);
-        Get.snackbar('Error', 'Error al cargar perfil: ${e.message}',
-            snackPosition: SnackPosition.BOTTOM,
-            backgroundColor: AppColors.error,
-            colorText: AppColors.backgroundWhite);
-        rethrow;
-      }
-    } catch (e, stackTrace) {
-      // Errores inesperados.
-      _logger.severe(
-          'Error inesperado al cargar o crear perfil para $userId: $e',
-          e,
-          stackTrace);
-      Get.snackbar(
-          'Error', 'Error inesperado al cargar o crear perfil: ${e.toString()}',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: AppColors.error,
-          colorText: AppColors.backgroundWhite);
-      rethrow;
-    }
+  @override
+  void onClose() {
+    _profileStreamSubscription?.cancel();
+    _logger.info('UserProfileService cerrado.');
+    super.onClose();
   }
 
-  /// Actualiza la información del perfil de un usuario existente.
-  ///
-  /// La columna `updated_at` de la tabla `profiles` se actualizará
-  /// automáticamente en el lado del servidor mediante el trigger `on_profiles_update`
-  /// que ejecuta la función `set_updated_at()`.
-  ///
-  /// Parámetros:
-  /// - `userId`: El ID del usuario cuyo perfil se va a actualizar.
-  /// - `username`: Nuevo nombre de usuario (opcional).
-  /// - `bio`: Nueva biografía (opcional).
-  /// - `avatarUrl`: Nueva URL del avatar (opcional).
-  Future<void> updateProfile({
-    required String userId,
-    String? username,
-    String? bio,
-    String? avatarUrl,
-  }) async {
-    _logger.info('Intentando actualizar perfil para ID: $userId');
+  /// Método principal para obtener o crear un perfil de usuario.
+  /// Intenta obtener el perfil existente. Si no lo encuentra, intenta crear uno básico.
+  /// Si ambos fallan, recurre a una función de respaldo en la base de datos.
+  Future<void> fetchOrCreateUserProfile(String userId) async {
+    isLoadingProfile.value = true;
     try {
-      final updates = <String, dynamic>{};
-      if (username != null) updates['username'] = username;
-      if (bio != null) updates['bio'] = bio;
-      if (avatarUrl != null) updates['avatar_url'] = avatarUrl;
+      _logger.info('Buscando o creando perfil para usuario: $userId');
 
-      if (updates.isEmpty) {
-        _logger.info(
-            'No hay cambios para actualizar el perfil. Operación omitida.');
+      // Intento 1: Obtener perfil existente
+      final profile = await _fetchProfile(userId);
+
+      if (profile != null) {
+        currentProfile.value = profile;
+        _logger.info('Perfil obtenido para $userId: ${profile.username}');
+        _setupProfileRealtimeListener(
+            userId); // Configurar listener solo si el perfil existe
         return;
       }
 
-      final response = await _supabase
-          .from('profiles')
-          .update(updates)
-          .eq('id', userId)
-          .select() // Seleccionar los datos actualizados para reflejarlos en la app.
-          .single();
+      // Intento 2: Crear perfil básico si no se encontró uno existente
+      _logger.warning(
+          'Perfil no encontrado para $userId. Intentando crear uno básico.');
+      await _createBasicProfile(userId);
 
-      currentProfile.value =
-          UserProfile.fromMap(response); // Actualizar el perfil observable.
-      _logger.info('Perfil actualizado para: $userId.');
-      Get.snackbar(
-        'Éxito',
-        'Perfil actualizado con éxito.',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: AppColors.success,
-        colorText: AppColors.backgroundWhite,
-      );
+      // Después de intentar crear, volver a intentar obtener el perfil
+      final createdProfile = await _fetchProfile(userId);
+      if (createdProfile != null) {
+        currentProfile.value = createdProfile;
+        _logger.info(
+            'Perfil básico creado y obtenido para $userId: ${createdProfile.username}');
+        _setupProfileRealtimeListener(userId);
+        return;
+      }
+
+      // Último recurso: Función de respaldo si la creación básica también falla
+      _logger.severe(
+          'Fallo la creación básica del perfil para $userId. Intentando función de respaldo.');
+      await _createProfileFallback(userId);
+
+      // Después de la función de respaldo, intentar obtener el perfil nuevamente
+      final fallbackProfile = await _fetchProfile(userId);
+      if (fallbackProfile != null) {
+        currentProfile.value = fallbackProfile;
+        _logger.info(
+            'Perfil creado con función de respaldo para $userId: ${fallbackProfile.username}');
+        _setupProfileRealtimeListener(userId);
+      } else {
+        throw Exception(
+            'No se pudo crear o obtener el perfil del usuario después de todos los intentos.');
+      }
     } on PostgrestException catch (e, stackTrace) {
-      _logger.severe('Error de Postgrest al actualizar perfil: ${e.message}', e,
+      _logger.severe(
+          'Error Postgrest en fetchOrCreateUserProfile: ${e.message}',
+          e,
           stackTrace);
-      Get.snackbar('Error', 'Error al actualizar perfil: ${e.message}',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: AppColors.error,
-          colorText: AppColors.backgroundWhite);
-      rethrow;
+      _showErrorSnackbar('Error de Perfil',
+          'Problema con la base de datos al cargar el perfil: ${e.message}');
+      currentProfile.value = null;
     } catch (e, stackTrace) {
       _logger.severe(
-          'Error inesperado al actualizar perfil: $e', e, stackTrace);
-      Get.snackbar(
-          'Error', 'Error inesperado al actualizar perfil: ${e.toString()}',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: AppColors.error,
-          colorText: AppColors.backgroundWhite);
+          'Error inesperado en fetchOrCreateUserProfile: $e', e, stackTrace);
+      _showErrorSnackbar('Error de Perfil',
+          'Ocurrió un error inesperado al gestionar el perfil.');
+      currentProfile.value = null;
+    } finally {
+      isLoadingProfile.value = false;
+    }
+  }
+
+  /// Intento 1: Obtener perfil existente.
+  /// Retorna [UserProfile] si se encuentra, de lo contrario [null].
+  Future<UserProfile?> _fetchProfile(String userId) async {
+    try {
+      final Map<String, dynamic>? data = await _supabaseClient
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle() // Usar maybeSingle para obtener un solo registro o null
+          .timeout(const Duration(
+              seconds: 5)); // Pequeño timeout para esta operación
+
+      return data != null ? UserProfile.fromJson(data) : null;
+    } on PostgrestException catch (e, stackTrace) {
+      _logger.warning(
+          'Error al buscar perfil para $userId: ${e.message}', e, stackTrace);
+      return null; // Retornar null si hay un error de Postgrest (ej. no encontrado)
+    } catch (e, stackTrace) {
+      _logger.warning(
+          'Error inesperado al buscar perfil para $userId: $e', e, stackTrace);
+      return null;
+    }
+  }
+
+  /// Intento 2: Crear perfil básico si no existe.
+  /// Asume que el usuario ya está autenticado y tiene un `currentUser`.
+  Future<void> _createBasicProfile(String userId) async {
+    final user = _supabaseClient.auth.currentUser;
+    if (user == null) {
+      _logger.warning('No hay usuario autenticado para crear perfil básico.');
+      return;
+    }
+
+    final username =
+        user.userMetadata?['username'] as String? ?? 'Usuario Tanari';
+
+    try {
+      // Insertar el perfil. created_at y updated_at deben ser manejados por la DB.
+      await _supabaseClient.from('profiles').insert({
+        'id': userId,
+        'username': username,
+        'email': user.email,
+        'is_admin': false, // Por defecto, no es admin
+      });
+      _logger.info('Perfil básico insertado para $userId.');
+    } on PostgrestException catch (e, stackTrace) {
+      if (e.message.contains('duplicate key')) {
+        _logger.info('Perfil ya existe para $userId (duplicado), no se creó.');
+      } else {
+        _logger.severe(
+            'Error al insertar perfil básico para $userId: ${e.message}',
+            e,
+            stackTrace);
+        rethrow; // Re-lanzar para que fetchOrCreateUserProfile lo capture
+      }
+    } catch (e, stackTrace) {
+      _logger.severe('Error inesperado al crear perfil básico para $userId: $e',
+          e, stackTrace);
       rethrow;
     }
   }
 
-  /// Sube un archivo de imagen al bucket 'avatars' de Supabase Storage.
-  ///
-  /// Parámetros:
-  /// - `userId`: El ID del usuario asociado al avatar (se usa para la ruta del archivo).
-  /// - `imageFile`: El archivo de imagen a subir.
-  ///
-  /// Retorna la URL pública del avatar subido.
-  Future<String> uploadAvatar(
-      {required String userId, required File imageFile}) async {
-    _logger.info(
-        'Intentando subir avatar para ID: $userId desde ${imageFile.path}');
+  /// Último recurso: Función de respaldo (RPC) para crear un perfil.
+  /// Esto se usa si la inserción directa falla por alguna razón inesperada.
+  /// Requiere que la función `create_profile_fallback` exista en Supabase.
+  Future<void> _createProfileFallback(String userId) async {
     try {
+      final user = _supabaseClient.auth.currentUser;
+      if (user == null) {
+        _logger
+            .warning('No hay usuario autenticado para la función de respaldo.');
+        return;
+      }
+      final username =
+          user.userMetadata?['username'] as String? ?? 'Usuario Tanari';
+
+      // Llama a la función RPC en Supabase
+      final Map<String, dynamic> response = await _supabaseClient.rpc(
+        'create_profile_fallback',
+        params: {
+          'user_id': userId,
+          'username_param':
+              username, // Usar un nombre de parámetro distinto para evitar conflictos
+          'email_param': user.email,
+        },
+      );
+
+      if (response.containsKey('error')) {
+        throw Exception(response['error']);
+      }
+      _logger.info('Perfil creado con función de respaldo para $userId.');
+    } on PostgrestException catch (e, stackTrace) {
+      _logger.severe('Error Postgrest en función de respaldo: ${e.message}', e,
+          stackTrace);
+      _showErrorSnackbar('Error de Base de Datos',
+          'Fallo la creación del perfil de respaldo: ${e.message}');
+      rethrow;
+    } catch (e, stackTrace) {
+      _logger.severe(
+          'Error inesperado en función de respaldo: $e', e, stackTrace);
+      rethrow;
+    }
+  }
+
+  /// Configura un listener en tiempo real para el perfil del usuario actual.
+  void _setupProfileRealtimeListener(String userId) {
+    _profileStreamSubscription?.cancel(); // Cancela suscripciones anteriores
+    _profileStreamSubscription = _supabaseClient
+        .from('profiles')
+        .stream(primaryKey: ['id'])
+        .eq('id', userId)
+        .listen((List<Map<String, dynamic>> data) {
+          if (data.isNotEmpty) {
+            currentProfile.value = UserProfile.fromJson(data[0]);
+            _logger
+                .info('Actualización de perfil en tiempo real para $userId.');
+          }
+        }, onError: (error, stackTrace) {
+          _logger.severe(
+              'Error en el stream de perfil en tiempo real para $userId: $error',
+              error,
+              stackTrace);
+          _showErrorSnackbar('Error de Conexión',
+              'Problema con la actualización en tiempo real del perfil.');
+        });
+    _logger.info('Listener en tiempo real para perfil $userId configurado.');
+  }
+
+  /// Limpia el perfil de usuario actual del observable.
+  void clearUserProfile() {
+    currentProfile.value = null;
+    _profileStreamSubscription?.cancel(); // Cancelar real-time listener
+    _logger.info('Perfil de usuario limpiado.');
+  }
+
+  /// Actualiza la información del perfil del usuario.
+  /// Los campos `created_at` y `updated_at` son manejados por la base de datos.
+  Future<void> updateProfile(Map<String, dynamic> updates) async {
+    final userId = _supabaseClient.auth.currentUser?.id;
+    if (userId == null) {
+      _logger.warning('No hay usuario autenticado para actualizar el perfil.');
+      _showErrorSnackbar('Error de Autenticación',
+          'No hay sesión activa para actualizar el perfil.');
+      return;
+    }
+
+    isLoadingProfile.value = true;
+    try {
+      _logger.info(
+          'Actualizando perfil para usuario: $userId con cambios: $updates');
+
+      // Eliminar campos que deben ser manejados por la base de datos
+      updates.remove('updated_at'); // La DB maneja esto con triggers/defaults
+      updates.remove('created_at'); // La DB maneja esto
+      updates.remove('id'); // El ID no debe ser actualizable por el cliente
+
+      await _supabaseClient.from('profiles').update(updates).eq('id',
+          userId); // No se usa .select().single() aquí, el listener en tiempo real lo actualizará.
+
+      _showSuccessSnackbar(
+          'Perfil Actualizado', 'Tu perfil ha sido actualizado exitosamente.');
+      // El listener en tiempo real (_setupProfileRealtimeListener) se encargará de actualizar currentProfile.value
+    } on PostgrestException catch (e, stackTrace) {
+      _logger.severe(
+          'Error actualizando perfil para $userId desde Supabase: ${e.message}',
+          e,
+          stackTrace);
+      _showErrorSnackbar('Error al Actualizar Perfil',
+          'No se pudo actualizar el perfil: ${e.message}');
+    } catch (e, stackTrace) {
+      _logger.severe('Error inesperado al actualizar perfil para $userId: $e',
+          e, stackTrace);
+      _showErrorSnackbar('Error al Actualizar Perfil',
+          'Ocurrió un error inesperado al actualizar el perfil.');
+    } finally {
+      if (Get.isRegistered<UserProfileService>()) {
+        isLoadingProfile.value = false;
+      }
+    }
+  }
+
+  /// Sube una nueva imagen de avatar a Supabase Storage y actualiza el perfil del usuario con la URL.
+  Future<void> uploadAvatar(File imageFile) async {
+    final userId = _supabaseClient.auth.currentUser?.id;
+    if (userId == null) {
+      _logger.warning('No hay usuario autenticado para subir avatar.');
+      _showErrorSnackbar('Error de Autenticación',
+          'No hay sesión activa para subir el avatar.');
+      return;
+    }
+
+    isLoadingProfile.value = true;
+    try {
+      _logger.info(
+          'Intentando subir avatar para ID: $userId desde ${imageFile.path}');
       // Definir la ruta de almacenamiento: userId/nombre_del_archivo.ext
       final String path = '$userId/${p.basename(imageFile.path)}';
 
       // Subir el archivo al bucket 'avatars'.
       // `upsert: true` permite reemplazar un archivo existente con el mismo nombre.
-      await _supabase.storage.from('avatars').upload(
-            path,
-            imageFile,
-            fileOptions: const FileOptions(
-              cacheControl: '3600', // Control de caché por 1 hora.
-              upsert: true,
-            ),
-          );
-
-      // Obtener la URL pública del archivo subido.
       final String publicUrl =
-          _supabase.storage.from('avatars').getPublicUrl(path);
+          await _supabaseClient.storage.from('avatars').upload(
+                path,
+                imageFile,
+                fileOptions: const FileOptions(
+                  cacheControl: '3600', // Control de caché por 1 hora.
+                  upsert: true,
+                ),
+              );
 
       // Actualizar el perfil del usuario con la nueva URL del avatar.
-      await updateProfile(userId: userId, avatarUrl: publicUrl);
+      // updateProfile ahora espera un mapa de actualizaciones.
+      await updateProfile({'avatar_url': publicUrl});
 
       _logger.info('Avatar subido y perfil actualizado con URL: $publicUrl');
-      return publicUrl;
+      _showSuccessSnackbar(
+          'Avatar Actualizado', 'Tu foto de perfil ha sido actualizada.');
     } on StorageException catch (e, stackTrace) {
       _logger.severe(
           'Error de Storage al subir avatar: ${e.message}', e, stackTrace);
-      Get.snackbar('Error', 'Error al subir avatar: ${e.message}',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: AppColors.error,
-          colorText: AppColors.backgroundWhite);
+      _showErrorSnackbar(
+          'Error al Subir Avatar', 'Error al subir avatar: ${e.message}');
       rethrow;
     } catch (e, stackTrace) {
       _logger.severe('Error inesperado al subir avatar: $e', e, stackTrace);
-      Get.snackbar('Error', 'Error inesperado al subir avatar: ${e.toString()}',
-          snackPosition: SnackPosition.BOTTOM,
-          backgroundColor: AppColors.error,
-          colorText: AppColors.backgroundWhite);
+      _showErrorSnackbar('Error al Subir Avatar',
+          'Error inesperado al subir avatar: ${e.toString()}');
       rethrow;
+    } finally {
+      if (Get.isRegistered<UserProfileService>()) {
+        isLoadingProfile.value = false;
+      }
     }
   }
 
@@ -296,20 +380,38 @@ class UserProfileService extends GetxService {
     // la reconstruimos para asegurar que sea válida y pueda tener un token de caché.
     if (storedPath.startsWith(prefix) && !storedPath.contains('?t=')) {
       final String fileName = storedPath.substring(prefix.length);
-      return _supabase.storage.from('avatars').getPublicUrl(fileName);
+      return _supabaseClient.storage.from('avatars').getPublicUrl(fileName);
     }
     // Si es una ruta relativa (ej. "user_id/imagen.png"), obtenemos la URL pública.
     else if (!storedPath.startsWith('http')) {
-      return _supabase.storage.from('avatars').getPublicUrl(storedPath);
+      return _supabaseClient.storage.from('avatars').getPublicUrl(storedPath);
     }
 
     // Si ya es una URL pública válida (incluyendo las que ya tienen token de caché), la retornamos tal cual.
     return storedPath;
   }
 
-  /// Limpia el perfil de usuario actual. Se usa típicamente al cerrar sesión.
-  void clearUserProfile() {
-    currentProfile.value = null;
-    _logger.info('Perfil de usuario limpiado.');
+  /// Muestra un snackbar de éxito con un título y mensaje.
+  void _showSuccessSnackbar(String title, String message) {
+    Get.snackbar(
+      title,
+      message,
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: AppColors.success,
+      colorText: AppColors.backgroundWhite,
+      duration: const Duration(seconds: 3),
+    );
+  }
+
+  /// Muestra un snackbar de error con un título y mensaje.
+  void _showErrorSnackbar(String title, String message) {
+    Get.snackbar(
+      title,
+      message,
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: AppColors.error,
+      colorText: AppColors.backgroundWhite,
+      duration: const Duration(seconds: 5),
+    );
   }
 }

@@ -108,12 +108,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true); // Activar indicador de carga.
       try {
-        final userId = _profileService.currentProfile.value!.id;
-        await _profileService.updateProfile(
-          userId: userId,
-          username: _usernameController.text.trim(),
-          bio: _bioController.text.trim(),
-        );
+        // Ahora updateProfile espera un mapa con los campos a actualizar
+        await _profileService.updateProfile({
+          'username': _usernameController.text.trim(),
+          'bio': _bioController.text.trim(),
+        });
         _toggleEditing(); // Salir del modo edición después de guardar.
         // El snackbar de éxito se muestra desde UserProfileService.
       } catch (e) {
@@ -139,10 +138,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() =>
           _isUploadingAvatar = true); // Activar indicador de carga de avatar.
       try {
-        final userId = _profileService.currentProfile.value!.id;
-        // La subida del avatar también actualiza el perfil con la nueva URL.
-        await _profileService.uploadAvatar(
-            userId: userId, imageFile: File(image.path));
+        // Ahora uploadAvatar espera solo el File
+        await _profileService.uploadAvatar(File(image.path));
         // El snackbar de éxito se muestra desde UserProfileService.
       } catch (e) {
         // El snackbar de error se muestra desde UserProfileService.
