@@ -5,7 +5,7 @@ import 'dart:io'; // Para usar exit(0) al cerrar la aplicación
 import 'package:flutter/material.dart';
 import 'package:icons_plus/icons_plus.dart';
 import 'package:tanari_app/src/controllers/services/auth_service.dart';
-import 'package:tanari_app/src/controllers/services/user_profile_service.dart';
+import 'package:tanari_app/src/controllers/services/user_profile_service.dart'; // Importar UserProfileService
 import 'package:tanari_app/src/core/app_colors.dart';
 import 'package:tanari_app/src/screens/home/home_tab.dart';
 import 'package:tanari_app/src/routes/app_pages.dart';
@@ -240,6 +240,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   currentAccountPicture: CircleAvatar(
+                    // AÑADIR ESTA KEY NUEVAMENTE
+                    key: ValueKey(userProfile?.avatarUrl ?? 'default_avatar'),
                     backgroundColor: AppColors.primary,
                     backgroundImage: (userProfile?.avatarUrl != null &&
                             userProfile!.avatarUrl!.isNotEmpty)

@@ -141,6 +141,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         // Ahora uploadAvatar espera solo el File
         await _profileService.uploadAvatar(File(image.path));
         // El snackbar de éxito se muestra desde UserProfileService.
+        // La actualización de la UI se maneja a través del listener en tiempo real del perfil
+        // y la Key en el CircleAvatar.
       } catch (e) {
         // El snackbar de error se muestra desde UserProfileService.
       } finally {
@@ -251,6 +253,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             // Avatar circular del usuario.
                             child: CircleAvatar(
+                              // AÑADIR KEY AQUÍ PARA FORZAR RECONSTRUCCIÓN
+                              // La key cambia cuando la URL del avatar cambia, forzando a Flutter a reconstruir
+                              // el widget CircleAvatar y a NetworkImage a recargar la imagen.
+                              key: ValueKey(profile.avatarUrl),
                               radius: 70,
                               backgroundColor: AppColors.backgroundWhite,
                               backgroundImage: profile.avatarUrl != null

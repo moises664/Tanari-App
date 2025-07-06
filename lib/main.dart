@@ -16,7 +16,7 @@ import 'package:tanari_app/src/screens/home/home_screen.dart';
 import 'package:tanari_app/src/screens/login/welcome_screen.dart';
 
 const appTitle = 'TAnaRi';
-// URL y clave anónima de Supabase. ¡Asegúrate de que estas sean correctas para tu proyecto!
+// URL y clave anónima de Supabase para la conexión a la base de datos.
 const String supabaseUrl = 'https://pfhteyhxvetjhaitlucx.supabase.co';
 const String supabaseAnonKey =
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBmaHRleWh4dmV0amhhaXRsdWN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkwNzMxMjcsImV4cCI6MjA2NDY0OTEyN30.93Ty5Z9JdUhHGFAgJkRW2yina0-WKkahqPC6QY9WTHk';
