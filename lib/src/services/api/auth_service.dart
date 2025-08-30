@@ -6,9 +6,9 @@ import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:logging/logging.dart';
 import 'package:tanari_app/src/routes/app_pages.dart';
-import 'package:tanari_app/src/controllers/services/user_profile_service.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
-import 'package:app_links/app_links.dart'; // Para manejar deep links
+import 'package:app_links/app_links.dart';
+import 'package:tanari_app/src/services/api/user_profile_service.dart'; // Para manejar deep links
 
 // Logger para la clase AuthService
 final _logger = Logger('AuthService');

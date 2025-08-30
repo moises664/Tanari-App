@@ -6,10 +6,10 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image_picker/image_picker.dart'; // Para selección de imágenes
 import 'package:intl/intl.dart'; // Para formateo de fechas
-import 'package:tanari_app/src/controllers/services/auth_service.dart';
-import 'package:tanari_app/src/controllers/services/user_profile_service.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
 import 'package:tanari_app/src/routes/app_pages.dart';
+import 'package:tanari_app/src/services/api/auth_service.dart';
+import 'package:tanari_app/src/services/api/user_profile_service.dart';
 
 /// Pantalla de perfil de usuario - Muestra y permite editar la información del usuario.
 ///

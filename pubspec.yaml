@@ -29,7 +29,11 @@ dependencies:
   intl: ^0.20.2 # Internacionalizacion y formateo de fechas
   fl_chart: ^0.65.0  # Gráficos y visualización de datos
   app_links: ^6.4.0 # Manejo de enlaces universales
-
+  url_launcher: ^6.3.2
+  flutter_map: ^8.2.1 # Mapas interactivos
+  latlong2: ^0.9.1 # Manejo de coordenadas geograficas 
+  mapbox_maps_flutter: ^2.10.0 # Mapas de Mapbox con funcionalidades avanzadas y personalizacion 
+  geolocator: ^14.0.2 # Geolocalizacion y servicios de ubicacion
 
 
 dev_dependencies:

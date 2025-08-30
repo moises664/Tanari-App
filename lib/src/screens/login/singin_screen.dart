@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:tanari_app/src/controllers/services/auth_service.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
 import 'package:tanari_app/src/routes/app_pages.dart'; // Importa las rutas para Get.toNamed
+import 'package:tanari_app/src/services/api/auth_service.dart';
 import 'package:tanari_app/src/widgets/custom_scaffold.dart';
 import 'package:get/get.dart';
 

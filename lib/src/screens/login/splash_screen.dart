@@ -2,11 +2,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:tanari_app/src/controllers/services/auth_service.dart';
-import 'package:tanari_app/src/controllers/services/user_profile_service.dart';
 import 'package:logging/logging.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
-import 'package:tanari_app/src/routes/app_pages.dart'; // Importa las rutas para navegación
+import 'package:tanari_app/src/routes/app_pages.dart';
+import 'package:tanari_app/src/services/api/auth_service.dart';
+import 'package:tanari_app/src/services/api/user_profile_service.dart'; // Importa las rutas para navegación
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});

@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:tanari_app/src/controllers/services/operation_data_service.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
 import 'package:logger/logger.dart';
+import 'package:tanari_app/src/services/api/operation_data_service.dart';
 
 /// Representa un punto de datos para gráficos de sensores
-/// - [timeInSeconds]: Tiempo en segundos desde el inicio de la sesión
-/// - [value]: Valor de la lectura del sensor
 class SensorChartData {
   final double timeInSeconds;
   final double value;
@@ -17,9 +15,6 @@ class SensorChartData {
 }
 
 /// Contiene estadísticas resumidas para lecturas de sensores
-/// - [min]: Valor mínimo registrado
-/// - [max]: Valor máximo registrado
-/// - [average]: Valor promedio
 class SensorStats {
   final double min;
   final double max;
@@ -33,7 +28,6 @@ class SensorStats {
 }
 
 /// Controlador para la pantalla de detalles de sesión
-/// Gestiona la lógica de negocio y estado de la UI
 class SessionDetailsController extends GetxController {
   final String sessionId;
   final OperationDataService _operationDataService =
@@ -124,7 +118,6 @@ class SessionDetailsController extends GetxController {
   void _processSensorData() {
     if (session.value == null || rawSensorReadings.isEmpty) return;
 
-    // Limpiar datos anteriores
     co2Data.clear();
     ch4Data.clear();
     temperaturaData.clear();
@@ -139,7 +132,6 @@ class SessionDetailsController extends GetxController {
       final double value = (reading['sensor_value'] as num).toDouble();
       final String sensorType = reading['sensor_type'];
 
-      // Clasificar lecturas por tipo de sensor
       switch (sensorType) {
         case 'CO2':
           co2Data
@@ -160,7 +152,6 @@ class SessionDetailsController extends GetxController {
       }
     }
 
-    // Ordenar datos por tiempo
     co2Data.sort((a, b) => a.timeInSeconds.compareTo(b.timeInSeconds));
     ch4Data.sort((a, b) => a.timeInSeconds.compareTo(b.timeInSeconds));
     temperaturaData.sort((a, b) => a.timeInSeconds.compareTo(b.timeInSeconds));
@@ -176,9 +167,9 @@ class SessionDetailsController extends GetxController {
   }
 
   /// Calcula las estadísticas para una lista de datos de sensor
-  SensorStats _calculateSensorStats(List<SensorChartData> data) {
+  SensorStats? _calculateSensorStats(List<SensorChartData> data) {
     if (data.isEmpty) {
-      return SensorStats(min: 0, max: 0, average: 0);
+      return null;
     }
 
     double min = double.maxFinite;
@@ -227,7 +218,6 @@ class SessionDetailsScreen extends StatelessWidget {
 
   const SessionDetailsScreen({super.key, required this.sessionId});
 
-  /// Formatea el tiempo en segundos a un string legible (mm:ss o ss)
   String _formatTime(double seconds) {
     if (seconds < 60) {
       return '${seconds.toInt()}s';
@@ -261,14 +251,11 @@ class SessionDetailsScreen extends StatelessWidget {
         elevation: 1,
       ),
       body: Obx(() {
-        // Estados de carga
         if (controller.isLoading.value) {
           return Center(
             child: CircularProgressIndicator(color: AppColors.primary),
           );
-        }
-        // Manejo de errores
-        else if (controller.errorMessage.isNotEmpty) {
+        } else if (controller.errorMessage.isNotEmpty) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(20.0),
@@ -296,9 +283,7 @@ class SessionDetailsScreen extends StatelessWidget {
               ),
             ),
           );
-        }
-        // Sesión no encontrada
-        else if (controller.session.value == null) {
+        } else if (controller.session.value == null) {
           return Center(
             child: Text(
               'No se encontraron detalles para esta sesión.',
@@ -308,7 +293,6 @@ class SessionDetailsScreen extends StatelessWidget {
           );
         }
 
-        // Configuración de visualización
         final sessionDetails = controller.session.value!;
         final maxTime = controller.maxTime;
         final currentMaxX = controller.timeRange.value > 0
@@ -320,29 +304,18 @@ class SessionDetailsScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Información de la sesión
               _buildSessionInfoCard(theme, sessionDetails),
               const SizedBox(height: 20),
-
-              // Selector de visualización
               _buildVisualizationSelector(controller, theme),
               const SizedBox(height: 16),
-
-              // Selector de sensores (solo en modo individual)
               if (controller.visualizationMode.value == 'individual')
                 _buildSensorSelector(controller, theme),
               const SizedBox(height: 16),
-
-              // Selector de rango de tiempo
               _buildTimeRangeSelector(controller, maxTime),
               const SizedBox(height: 16),
-
-              // Selector de modo de gráfica (discreta/continua) por sensor
               if (controller.visualizationMode.value == 'individual')
                 _buildGraphStyleSelector(controller, theme),
               const SizedBox(height: 16),
-
-              // Título para la sección de gráficos
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
                 child: Text(
@@ -356,8 +329,6 @@ class SessionDetailsScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 10),
-
-              // Contenedor de gráficos (individual o combinado)
               _buildChartSection(controller, theme, currentMaxX),
               const SizedBox(height: 20),
             ],
@@ -367,7 +338,6 @@ class SessionDetailsScreen extends StatelessWidget {
     );
   }
 
-  /// Construye el selector de modo de visualización (individual o combinado)
   Widget _buildVisualizationSelector(
       SessionDetailsController controller, ThemeData theme) {
     return Card(
@@ -398,7 +368,6 @@ class SessionDetailsScreen extends StatelessWidget {
     );
   }
 
-  /// Construye una opción de visualización (botón)
   Widget _buildVisualizationOption({
     required SessionDetailsController controller,
     required ThemeData theme,
@@ -439,7 +408,6 @@ class SessionDetailsScreen extends StatelessWidget {
     );
   }
 
-  /// Construye el selector de sensores para el modo individual
   Widget _buildSensorSelector(
       SessionDetailsController controller, ThemeData theme) {
     return Card(
@@ -485,7 +453,6 @@ class SessionDetailsScreen extends StatelessWidget {
     );
   }
 
-  /// Construye una opción de sensor (chip)
   Widget _buildSensorOption({
     required SessionDetailsController controller,
     required ThemeData theme,
@@ -520,7 +487,6 @@ class SessionDetailsScreen extends StatelessWidget {
     );
   }
 
-  /// Construye el selector de rango de tiempo
   Widget _buildTimeRangeSelector(
       SessionDetailsController controller, double maxTime) {
     return Card(
@@ -567,7 +533,6 @@ class SessionDetailsScreen extends StatelessWidget {
     );
   }
 
-  /// Construye el selector de estilo de gráfica (discreta/continua) por sensor
   Widget _buildGraphStyleSelector(
       SessionDetailsController controller, ThemeData theme) {
     return Card(
@@ -626,7 +591,6 @@ class SessionDetailsScreen extends StatelessWidget {
     );
   }
 
-  /// Construye una opción de estilo de gráfica (chip)
   Widget _buildGraphStyleOption({
     required SessionDetailsController controller,
     required ThemeData theme,
@@ -657,7 +621,6 @@ class SessionDetailsScreen extends StatelessWidget {
     );
   }
 
-  /// Construye la sección de gráficos según el modo de visualización
   Widget _buildChartSection(SessionDetailsController controller,
       ThemeData theme, double currentMaxX) {
     if (controller.visualizationMode.value == 'todas') {
@@ -667,7 +630,6 @@ class SessionDetailsScreen extends StatelessWidget {
     }
   }
 
-  /// Construye los gráficos individuales en un carrusel horizontal
   Widget _buildIndividualCharts(SessionDetailsController controller,
       ThemeData theme, double currentMaxX) {
     return SizedBox(
@@ -728,86 +690,50 @@ class SessionDetailsScreen extends StatelessWidget {
     );
   }
 
-  /// Construye el gráfico combinado que muestra todos los sensores en un solo gráfico
   Widget _buildCombinedChart(SessionDetailsController controller,
       ThemeData theme, double currentMaxX) {
-    // Calcular valores máximos y mínimos para todos los sensores
     double minY = 0;
     double maxY = 100;
 
-    // Función para encontrar el valor máximo transformado
-    double getMaxTransformedValue(
-        List<SensorChartData> data, double Function(double) transform) {
-      if (data.isEmpty) return 0;
-      return data
-          .where((d) => d.timeInSeconds <= currentMaxX)
-          .map((d) => transform(d.value))
-          .reduce((a, b) => a > b ? a : b);
-    }
-
-    // Función para encontrar el valor mínimo transformado
-    double getMinTransformedValue(
-        List<SensorChartData> data, double Function(double) transform) {
-      if (data.isEmpty) return 0;
-      return data
-          .where((d) => d.timeInSeconds <= currentMaxX)
-          .map((d) => transform(d.value))
-          .reduce((a, b) => a < b ? a : b);
-    }
-
-    // Obtener todos los valores transformados
     List<double> allValues = [];
 
-    // CO₂: dividir por 10
     if (controller.co2Data.isNotEmpty) {
       allValues.addAll(controller.co2Data
           .where((d) => d.timeInSeconds <= currentMaxX)
           .map((d) => d.value / 10));
     }
-
-    // CH₄: multiplicar por 10
     if (controller.ch4Data.isNotEmpty) {
       allValues.addAll(controller.ch4Data
           .where((d) => d.timeInSeconds <= currentMaxX)
           .map((d) => d.value * 10));
     }
-
-    // Temperatura: multiplicar por 2
     if (controller.temperaturaData.isNotEmpty) {
       allValues.addAll(controller.temperaturaData
           .where((d) => d.timeInSeconds <= currentMaxX)
           .map((d) => d.value * 2));
     }
-
-    // Humedad: sin transformación
     if (controller.humedadData.isNotEmpty) {
       allValues.addAll(controller.humedadData
           .where((d) => d.timeInSeconds <= currentMaxX)
           .map((d) => d.value));
     }
 
-    // Calcular min y max globales
     if (allValues.isNotEmpty) {
       minY = allValues.reduce((a, b) => a < b ? a : b);
       maxY = allValues.reduce((a, b) => a > b ? a : b);
 
-      // Aplicar margen del 15%
       double range = maxY - minY;
       double margin = range * 0.15;
       minY = minY - margin;
       maxY = maxY + margin;
 
-      // Asegurar valores mínimos
       if (minY == maxY) {
         minY -= 10;
         maxY += 10;
       }
-
-      // Evitar valores negativos
       if (minY < 0) minY = 0;
     }
 
-    // Calcular intervalos seguros para evitar errores
     double horizontalInterval = maxY - minY > 0 ? (maxY - minY) / 5 : 1.0;
     double verticalInterval = currentMaxX > 0 ? currentMaxX / 5 : 1.0;
 
@@ -949,18 +875,17 @@ class SessionDetailsScreen extends StatelessWidget {
                             String unit = '';
                             double realValue = flSpot.y;
 
-                            // Determinar unidad y valor real basado en la serie
                             switch (touchedSpot.barIndex) {
                               case 0:
-                                realValue = flSpot.y * 10; // Revertir escalado
+                                realValue = flSpot.y * 10;
                                 unit = 'ppm (CO₂)';
                                 break;
                               case 1:
-                                realValue = flSpot.y / 10; // Revertir escalado
+                                realValue = flSpot.y / 10;
                                 unit = 'ppm (CH₄)';
                                 break;
                               case 2:
-                                realValue = flSpot.y / 2; // Revertir escalado
+                                realValue = flSpot.y / 2;
                                 unit = 'ºC';
                                 break;
                               case 3:
@@ -1002,10 +927,8 @@ class SessionDetailsScreen extends StatelessWidget {
     );
   }
 
-  /// Construye la tarjeta de información de la sesión
   Widget _buildSessionInfoCard(
       ThemeData theme, OperationSession sessionDetails) {
-    // Calcular la duración manualmente
     final duration = sessionDetails.endTime != null
         ? sessionDetails.endTime!.difference(sessionDetails.startTime)
         : Duration.zero;
@@ -1079,7 +1002,6 @@ class SessionDetailsScreen extends StatelessWidget {
     );
   }
 
-  /// Construye una fila de información para la tarjeta de sesión
   Widget _buildInfoRow(
       ThemeData theme, IconData icon, String label, String value) {
     return Padding(
@@ -1109,7 +1031,6 @@ class SessionDetailsScreen extends StatelessWidget {
     );
   }
 
-  /// Construye una tarjeta de sensor con gráfico y estadísticas
   Widget _buildSensorCard({
     required ThemeData theme,
     required String title,
@@ -1119,13 +1040,11 @@ class SessionDetailsScreen extends StatelessWidget {
     bool showPoints = false,
     required double currentMaxX,
   }) {
-    // Filtrar datos dentro del rango de tiempo seleccionado
     final filteredData =
         data.where((d) => d.timeInSeconds <= currentMaxX).toList();
     final hasData = filteredData.isNotEmpty;
 
-    // Calcular estadísticas para los datos filtrados
-    SensorStats stats;
+    SensorStats? stats;
     if (hasData) {
       double min = double.maxFinite;
       double max = double.negativeInfinity;
@@ -1140,36 +1059,27 @@ class SessionDetailsScreen extends StatelessWidget {
         max: max,
         average: sum / filteredData.length,
       );
-    } else {
-      stats = SensorStats(min: 0, max: 0, average: 0);
     }
 
-    // Determinar los límites del eje Y con un margen
     double minY = 0;
     double maxY = 100;
-    if (hasData) {
+    if (hasData && stats != null) {
       final double range = stats.max - stats.min;
-      final double margin = range * 0.15; // margen del 15%
+      final double margin = range * 0.15;
       minY = (stats.min - margin).clamp(0, double.infinity);
       maxY = stats.max + margin;
 
-      // Si todos los valores son iguales, ajustamos un rango mínimo
       if (minY == maxY) {
         minY = minY - 10;
         maxY = maxY + 10;
       }
-
-      // Manejo especial para CO2 (evitar valores negativos)
       if (title.contains('CO₂')) {
         minY = minY.clamp(0, double.infinity);
       }
     }
 
-    // Calcular intervalos para las cuadrículas
     final double yRange = maxY - minY;
-    // Asegurar que el intervalo horizontal no sea cero
     final double horizontalInterval = yRange > 0 ? yRange / 5 : 1.0;
-    // Asegurar que el intervalo vertical no sea cero
     final double verticalInterval = currentMaxX > 0 ? currentMaxX / 5 : 1.0;
 
     final spots =
@@ -1195,8 +1105,6 @@ class SessionDetailsScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 10),
-
-              // Gráfica con escala dinámica
               AspectRatio(
                 aspectRatio: 1.5,
                 child: hasData
@@ -1328,7 +1236,7 @@ class SessionDetailsScreen extends StatelessWidget {
                         ),
                       ),
               ),
-              if (hasData) ...[
+              if (hasData && stats != null) ...[
                 const SizedBox(height: 8),
                 _buildStatsTable(theme, stats, color),
               ],
@@ -1339,7 +1247,6 @@ class SessionDetailsScreen extends StatelessWidget {
     );
   }
 
-  /// Construye la tabla de estadísticas (min, max, promedio)
   Widget _buildStatsTable(ThemeData theme, SensorStats stats, Color color) {
     return Container(
       decoration: BoxDecoration(
@@ -1384,7 +1291,6 @@ class SessionDetailsScreen extends StatelessWidget {
     );
   }
 
-  /// Construye una caja de estadística individual (min, max, promedio)
   Widget _buildStatBox({
     required ThemeData theme,
     required String title,

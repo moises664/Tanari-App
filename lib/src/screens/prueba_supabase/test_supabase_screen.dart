@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart'; // Si usas GetX
-import 'package:tanari_app/src/controllers/services/supabase_test_service.dart'; // Importa tu nuevo servicio
+import 'package:tanari_app/src/services/api/supabase_test_service.dart'; // Importa tu nuevo servicio
 
 class TestSupabaseScreen extends StatefulWidget {
   const TestSupabaseScreen({super.key});

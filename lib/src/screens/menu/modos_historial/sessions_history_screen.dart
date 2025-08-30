@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart'; // Para formatear fechas
-import 'package:tanari_app/src/controllers/services/operation_data_service.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
 import 'package:tanari_app/src/screens/menu/modos_historial/session_details_screen.dart';
+import 'package:tanari_app/src/services/api/operation_data_service.dart';
 
 /// Controlador para la pantalla de historial de sesiones.
 /// Se encarga de cargar y gestionar la lista de sesiones de operación del usuario.

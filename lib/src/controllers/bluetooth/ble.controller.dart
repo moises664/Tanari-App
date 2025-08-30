@@ -1,3 +1,4 @@
+//VERSION 6 + APP (Solución Definitiva)
 import 'dart:async'; // Para usar Timer y StreamSubscription
 import 'dart:io'; // Para Platform.isAndroid
 import 'package:device_info_plus/device_info_plus.dart'; // Para obtener información del dispositivo
@@ -10,7 +11,7 @@ import 'package:flutter/material.dart'; // Para SnackBar y otros widgets
 import 'package:tanari_app/src/controllers/bluetooth/found_device.dart';
 
 // Importa tu servicio de permisos
-import 'package:tanari_app/src/controllers/services/permissions_service.dart'; // Asegúrate que la ruta sea correcta
+import 'package:tanari_app/src/services/api/permissions_service.dart'; // Asegúrate que la ruta sea correcta
 
 /// Controlador principal para la gestión de Bluetooth Low Energy (BLE).
 /// Centraliza la lógica de escaneo, conexión, desconexión, envío/recepción de datos
@@ -46,10 +47,20 @@ class BleController extends GetxController {
   static const String endAutoMode =
       'T'; // Comando para finalizar el modo automático
   static const String startRecording = 'G'; // Iniciar grabación
-  static const String stopRecording = 'N'; // Detener grabación
+  static const String stopRecording =
+      'N'; // Detener grabación (también es Cancelar Modo Auto)
   static const String startAutoMode = 'A'; // Iniciar modo automático
   static const String toggleLedOn = 'H'; // Comando para encender el LED
   static const String toggleLedOff = 'L'; // Comando para apagar el LED
+
+  // Nuevos comandos según el plan de acción
+  static const String recordPoint = 'W'; // Grabar un punto en la ruta
+  static const String endRecording = 'E'; // Finalizar la grabación de la ruta
+  static const String extractData = 'X'; // Extraer datos del UGV
+  static const String cancelAuto =
+      'N'; // Cancelar modo automático (reutiliza 'N')
+  static const String deleteRoutePrefix =
+      'DEL:'; // Prefijo para borrar una ruta
 
   //----------------------------------------------------------------------------
   // ESTADOS REACTIVOS (OBSERVABLES)
@@ -81,6 +92,51 @@ class BleController extends GetxController {
 
   final RxnString receivedData = RxnString(
       null); // RxString para los datos recibidos del UGV, puede ser nulo
+
+  // Nuevos estados reactivos para el panel de configuración del UGV
+  final currentSpeed = 100.obs; // Velocidad actual (RPM)
+  final currentWaitTime = 1000.obs; // Tiempo de espera (ms)
+  final batteryLevel = 100.obs; // Nivel de batería (%)
+  final memoryStatus =
+      false.obs; // Estado de la memoria (false = libre, true = llena)
+  // ===========================================================================
+  // INICIO: NUEVO ESTADO PARA ACOPLE FÍSICO
+  // ===========================================================================
+  /// Indica si el acople físico entre el UGV y el DP está activo.
+  final isPhysicallyCoupled = false.obs;
+  // ===========================================================================
+  // FIN: NUEVO ESTADO PARA ACOPLE FÍSICO
+  // ===========================================================================
+
+  // ===========================================================================
+  // INICIO: NUEVOS ESTADOS PARA EXTRACCIÓN DE BASE DE DATOS
+  // ===========================================================================
+  /// Indica si el proceso de extracción de datos está activo.
+  final isExtractingData = false.obs;
+
+  /// Almacena las líneas de datos recibidas de la base de datos del UGV.
+  final ugvDatabaseData = <String>[].obs;
+
+  /// Almacena el estado final de la extracción: 'completed', 'empty', 'error', o null.
+  final Rxn<String> extractionStatus = Rxn<String>(null);
+  // ===========================================================================
+  // FIN: NUEVOS ESTADOS PARA EXTRACCIÓN DE BASE DE DATOS
+  // ===========================================================================
+
+  // ===========================================================================
+  // INICIO: NUEVO ESTADO PARA EL INDICADOR DE RUTA RECIBIDO DEL UGV
+  // ===========================================================================
+  /// Almacena el indicador de la nueva ruta creada, recibido directamente del UGV.
+  /// Ejemplo: "A4". Es nulo hasta que se recibe un nuevo indicador.
+  final RxnString newRouteIndicator = RxnString(null);
+  // ===========================================================================
+  // FIN: NUEVO ESTADO PARA EL INDICADOR DE RUTA
+  // ===========================================================================
+
+  /// **NUEVO: Nivel de batería para el dispositivo Tanari DP.**
+  /// Almacena el porcentaje de batería recibido del dispositivo portátil.
+  /// Se inicializa en 0 para indicar que no hya datos hasta la primera lectura.
+  final portableBatteryLevel = 0.obs;
 
   //----------------------------------------------------------------------------
   // SUBSCRIPCIONES Y TIMERS
@@ -530,8 +586,8 @@ class BleController extends GetxController {
         ?.cancel(); // Cancela cualquier suscripción anterior para este dispositivo.
     _valueSubscriptions[deviceId] =
         characteristic.onValueReceived.listen((value) {
-      final dataString =
-          String.fromCharCodes(value); // Convierte los bytes a una cadena.
+      final dataString = String.fromCharCodes(value)
+          .trim(); // Convierte los bytes a una cadena y limpia espacios
       if (characteristic.uuid.toString().toLowerCase() ==
           characteristicUuidPortableNotify) {
         // Si es la característica del DP, parsea y almacena los datos.
@@ -542,13 +598,113 @@ class BleController extends GetxController {
       else if (characteristic.uuid.toString().toLowerCase() ==
           characteristicUuidUGV) {
         _logger.d('Datos del Tanari UGV ($deviceId): $dataString');
-        receivedData.value =
-            dataString; // Actualiza el RxString con los datos del UGV
-        // Después de procesar el dato, se establece a null para permitir que el listener se dispare de nuevo
-        // cuando el mismo valor ('T') sea recibido en el futuro.
-        Future.delayed(const Duration(milliseconds: 50)).then((_) {
-          receivedData.value = null;
-        });
+
+        // ===================================================================
+        // INICIO: LÓGICA DE PROCESAMIENTO DE DATOS DEL UGV (ACTUALIZADA)
+        // ===================================================================
+
+        // Primero, se verifica si estamos en modo de extracción de datos.
+        if (isExtractingData.value) {
+          if (dataString == 'O') {
+            // Fin de la extracción
+            isExtractingData.value = false;
+            extractionStatus.value = 'completed';
+          } else if (dataString == 'K') {
+            // Base de datos vacía
+            isExtractingData.value = false;
+            extractionStatus.value = 'empty';
+          }
+          // ===================================================================
+          // INICIO DE LA CORRECCIÓN
+          // Solo se añade la línea si contiene ';' (formato de datos de sensores).
+          // Esto evita que los datos de estado en tiempo real (que usan ',') se mezclen.
+          else if (dataString.contains(';')) {
+            // Es una línea de datos de sensores, la añadimos a la lista.
+            ugvDatabaseData.add(dataString);
+          } else {
+            // Se ignora cualquier otra cadena (como el estado) durante la extracción.
+            _logger.d(
+                "Ignorando cadena durante extracción (formato no es de datos): $dataString");
+          }
+          // FIN DE LA CORRECCIÓN
+          // ===================================================================
+          return; // Termina el procesamiento aquí si estábamos extrayendo.
+        }
+
+        // ===================================================================
+        // INICIO: NUEVA LÓGICA PARA CAPTURAR EL INDICADOR DE RUTA
+        // ===================================================================
+        // Si el dato empieza con 'A' seguido de un número, es el indicador de la nueva ruta.
+        if (dataString.startsWith('A') &&
+            int.tryParse(dataString.substring(1)) != null) {
+          _logger.i("Nuevo indicador de ruta recibido del UGV: $dataString");
+          newRouteIndicator.value = dataString;
+          // Resetea el valor después de un momento para que pueda ser detectado como un nuevo evento.
+          Future.delayed(const Duration(milliseconds: 100)).then((_) {
+            if (newRouteIndicator.value == dataString) {
+              newRouteIndicator.value = null;
+            }
+          });
+          return; // Termina el procesamiento aquí para no confundirlo con otros comandos.
+        }
+        // ===================================================================
+        // FIN: NUEVA LÓGICA PARA CAPTURAR EL INDICADOR DE RUTA
+        // ===================================================================
+
+        // Si no estamos extrayendo, procesamos otros tipos de datos.
+        // Si la cadena contiene comas, es la trama de estado principal.
+        if (dataString.contains(',')) {
+          final parts = dataString.split(',');
+          for (String rawPart in parts) {
+            final part = rawPart.trim(); // Limpia espacios de cada parte
+
+            if (part.startsWith('VS:')) {
+              final speedValue = double.tryParse(part.substring(3));
+              if (speedValue != null) {
+                currentSpeed.value = speedValue.round();
+              }
+            } else if (part.startsWith('TE:')) {
+              final waitTimeValue = int.tryParse(part.substring(3));
+              if (waitTimeValue != null) {
+                currentWaitTime.value = waitTimeValue;
+              }
+            } else if (part.startsWith('B:')) {
+              final battery = int.tryParse(part.substring(2));
+              if (battery != null) {
+                batteryLevel.value = battery;
+              }
+            } else if (part.startsWith('M:')) {
+              memoryStatus.value = part.substring(2) == '1';
+            }
+            // ===============================================================
+            // INICIO: PARSEO DE ESTADO DE ACOPLE
+            // ===============================================================
+            else if (part.startsWith('A:')) {
+              isPhysicallyCoupled.value = part.substring(2) == '1';
+            }
+            // ===============================================================
+            // FIN: PARSEO DE ESTADO DE ACOPLE
+            // ===============================================================
+          }
+          // Forzamos la actualización de GetX para asegurar que la UI se reconstruya
+          currentSpeed.refresh();
+          currentWaitTime.refresh();
+          batteryLevel.refresh();
+          memoryStatus.refresh();
+        }
+        // Si es cualquier otra cadena (como 'T'), es un comando de estado.
+        else {
+          receivedData.value = dataString;
+          // Resetea el valor después de un corto tiempo para poder recibir el mismo comando de nuevo.
+          Future.delayed(const Duration(milliseconds: 50)).then((_) {
+            if (receivedData.value == dataString) {
+              receivedData.value = null;
+            }
+          });
+        }
+        // ===================================================================
+        // FIN: LÓGICA DE PROCESAMIENTO DE DATOS DEL UGV (ACTUALIZADA)
+        // ===================================================================
       }
     }, onError: (error) {
       _logger.e(
@@ -563,6 +719,19 @@ class BleController extends GetxController {
         "Notificaciones activadas para ${characteristic.uuid} en $deviceId.");
   }
 
+  /// **Parsea y almacena los datos recibidos del dispositivo Tanari DP.**
+  ///
+  /// Esta función ha sido **actualizada** para manejar la nueva trama de datos que
+  /// incluye el nivel de la batería.
+  ///
+  /// **Formato esperado:** `"CO2;CH4;Temp;Hum;Bat"`
+  /// - `CO2`: Valor de CO2 en ppm.
+  /// - `CH4`: Valor de Metano en ppm.
+  /// - `Temp`: Valor de Temperatura en °C.
+  /// - `Hum`: Valor de Humedad en %.
+  /// - `Bat`: Porcentaje de batería (0-100).
+  ///
+  /// @param data La cadena de texto recibida del dispositivo BLE.
   // En tu BleController, dentro de _parseAndStorePortableData
   void _parseAndStorePortableData(String data) {
     try {
@@ -574,8 +743,16 @@ class BleController extends GetxController {
         portableData['ch4'] = parts[1];
         portableData['temperature'] = parts[2];
         portableData['humidity'] = parts[3];
-        // Solo intenta parsear pressure si la longitud es 5 o más
-        portableData['pressure'] = (parts.length >= 5) ? parts[4] : '--';
+
+        //*NUEVO**: Parsea y actualiza el nivel de batería del DP.
+        if (parts.length >= 5) {
+          final battery = int.tryParse(parts[4]);
+          if (battery != null) {
+            portableBatteryLevel.value = battery;
+          } else {
+            _logger.w('Valor de batería no válido recibido: ${parts[4]}');
+          }
+        }
         portableData.refresh();
       } else {
         _logger.w('Formato de datos del Tanari DP incorrecto: $data');
@@ -679,6 +856,23 @@ class BleController extends GetxController {
       isAutomaticMode.value = false;
       isUgvConnected.value = false; // Actualiza el estado de conexión del UGV.
       receivedData.value = null; // Limpiar datos recibidos del UGV
+      // =======================================================================
+      // INICIO: LIMPIEZA DE ESTADO DE ACOPLE
+      // =======================================================================
+      isPhysicallyCoupled.value = false;
+      // =======================================================================
+      // FIN: LIMPIEZA DE ESTADO DE ACOPLE
+      // =======================================================================
+
+      // =======================================================================
+      // INICIO: LIMPIEZA DE ESTADOS DE EXTRACCIÓN
+      // =======================================================================
+      isExtractingData.value = false;
+      ugvDatabaseData.clear();
+      extractionStatus.value = null;
+      // =======================================================================
+      // FIN: LIMPIEZA DE ESTADOS DE EXTRACCIÓN
+      // =======================================================================
     }
     if (portableDeviceId == deviceId) {
       isPortableConnected.value = false;

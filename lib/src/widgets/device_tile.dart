@@ -79,20 +79,7 @@ class DeviceTile extends StatelessWidget {
               onPressed: onDisconnect,
               tooltip: 'Desconectar',
             ),
-          // Botón para TOGGLE LED: visible solo si está conectado y la callback `onToggleLed` existe.
-          // El icono y el color cambian según el estado `isLedOn`.
-          if (isConnected && onToggleLed != null)
-            IconButton(
-              icon: Icon(
-                isLedOn
-                    ? Icons.lightbulb
-                    : Icons
-                        .lightbulb_outline, // lightbulb para encendido, lightbulb_outline para apagado
-                color: isLedOn ? Colors.amber : Colors.grey,
-              ),
-              onPressed: onToggleLed,
-              tooltip: isLedOn ? 'Apagar LED' : 'Encender LED',
-            ),
+
           // Botón de INFO: siempre visible para mostrar detalles del dispositivo.
           IconButton(
             icon: const Icon(Icons.info, color: Colors.blueGrey),

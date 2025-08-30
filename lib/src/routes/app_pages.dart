@@ -8,41 +8,55 @@ import 'package:tanari_app/src/screens/login/splash_screen.dart';
 import 'package:tanari_app/src/screens/login/welcome_screen.dart';
 import 'package:tanari_app/src/screens/menu/acerca_app.dart';
 import 'package:tanari_app/src/screens/menu/comunicacion_ble.dart';
-import 'package:tanari_app/src/screens/menu/historial_app.dart';
+import 'package:tanari_app/src/screens/menu/map_tanari_screen.dart';
+import 'package:tanari_app/src/screens/menu/modos_historial/sessions_history_screen.dart';
+import 'package:tanari_app/src/screens/menu/modos_historial/ugv_routes_screen.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_acople.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_monitoreo.dart';
 import 'package:tanari_app/src/screens/menu/modos_operacion/modo_ugv.dart';
 import 'package:tanari_app/src/screens/menu/profile_screen.dart';
 import 'package:tanari_app/src/screens/menu/roles/admin_screen.dart';
 
-/// Nombres de rutas abstractos para la aplicación
+/// **Clase Abstracta de Rutas Nombradas (`Routes`)**
 ///
-/// Cada constante representa una ruta nombrada que puede ser utilizada
-/// para la navegación en la aplicación.
+/// Centraliza todas las constantes de las rutas nombradas utilizadas en la aplicación.
+/// Usar constantes en lugar de strings directos previene errores tipográficos y
+/// facilita el mantenimiento y la refactorización de la navegación.
 abstract class Routes {
+  // Rutas de Autenticación y Bienvenida
   static const String initial = '/';
   static const String welcome = '/welcome';
-  static const String signIn =
-      '/signIn'; // <--- Nombre de ruta para Iniciar Sesión
-  static const String home = '/home';
-  static const String signUp =
-      '/signUp'; // <--- Nombre de ruta para Registrarse (Mantener 'signUp' para consistencia con la clase)
+  static const String signIn = '/signIn';
+  static const String signUp = '/signUp';
   static const String forgetPassword = '/forgetPassword';
   static const String changePassword = '/changePassword';
+
+  // Ruta Principal
+  static const String home = '/home';
+
+  // Rutas del Menú Lateral (Drawer)
   static const String profile = '/profile';
   static const String acercaApp = '/acercaApp';
-  static const String comunicacionBle = '/comunicacionBle';
-  static const String historialApp = '/historialApp';
   static const String modoAcople = '/modoAcople';
+
+  /// **CORREGIDO:** Se ha corregido el error tipográfico de "Hitorial" a "Historial".
+  static const String sessionsHistorial = '/sessionsHistorial';
+  static const String ugvRoute = '/ugvRoute';
+  static const String adminPanel = '/admin-panel';
+
+  // Rutas de la Barra de Navegación Inferior (pueden o no tener rutas nombradas)
+  static const String comunicacionBle = '/comunicacionBle';
   static const String modoMonitoreo = '/modoMonitoreo';
   static const String modoUgv = '/modoUgv';
-  static const adminPanel = '/admin-panel';
+  static const String mapaTanari = '/mapaTanari';
 }
 
-/// Configuración de rutas de la aplicación
+/// **Configuración de Páginas y Rutas de la Aplicación (`AppPages`)**
 ///
-/// Define todas las rutas disponibles con sus respectivas pantallas
-/// y transiciones de navegación.
+/// Define la lista de todas las páginas (`GetPage`) disponibles en la aplicación.
+/// Cada `GetPage` asocia una ruta nombrada (de la clase `Routes`) con el widget
+/// de la pantalla correspondiente y permite configurar transiciones y otros
+/// parámetros de navegación de GetX.
 class AppPages {
   static final List<GetPage> routes = [
     GetPage(
@@ -58,8 +72,7 @@ class AppPages {
     ),
     GetPage(
       name: Routes.signIn,
-      page: () =>
-          const SignInScreen(), // <--- ¡CORREGIDO! Ahora apunta a SignInScreen
+      page: () => const SignInScreen(),
       transition: Transition.rightToLeft,
     ),
     GetPage(
@@ -98,8 +111,14 @@ class AppPages {
       transition: Transition.rightToLeft,
     ),
     GetPage(
-      name: Routes.historialApp,
-      page: () => const HistorialApp(),
+      // **CORREGIDO:** Apunta a la constante corregida.
+      name: Routes.sessionsHistorial,
+      page: () => const SessionsHistoryScreen(),
+      transition: Transition.fadeIn,
+    ),
+    GetPage(
+      name: Routes.ugvRoute,
+      page: () => const UgvRoutesScreen(),
       transition: Transition.leftToRight,
     ),
     GetPage(
@@ -120,6 +139,11 @@ class AppPages {
     GetPage(
       name: Routes.adminPanel,
       page: () => const AdminScreen(),
+      transition: Transition.fadeIn,
+    ),
+    GetPage(
+      name: Routes.mapaTanari,
+      page: () => MapScreen(),
       transition: Transition.fadeIn,
     ),
   ];

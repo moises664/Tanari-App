@@ -123,17 +123,6 @@ class ComunicacionBleScreen extends StatelessWidget {
                 onDisconnect: isConnected
                     ? () => bleController.disconnectDevice(deviceId)
                     : null,
-
-                // Botón de Toggle LED:
-                // Se muestra y es funcional SOLO si:
-                // 1. El dispositivo es el 'TANARI UGV' (según su platformName).
-                // 2. El dispositivo está conectado.
-                // 3. Su característica correspondiente (ugvCharacteristic) ha sido descubierta y es writable.
-                onToggleLed: (device.platformName ==
-                            BleController.deviceNameUGV &&
-                        isConnected)
-                    ? () => bleController.toggleLedUGV(deviceId)
-                    : null, // Si no es el UGV o no está conectado, el botón no se muestra.
               ),
             );
           },

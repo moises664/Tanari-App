@@ -1,15 +1,15 @@
 // admin_screen.dart
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:tanari_app/src/controllers/services/admin_services.dart';
-import 'package:tanari_app/src/controllers/services/user_profile_service.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
 import 'package:tanari_app/src/models/user_profile.dart';
+import 'package:tanari_app/src/services/api/admin_services.dart';
+import 'package:tanari_app/src/services/api/user_profile_service.dart';
+import 'user_sessions_history_screen.dart';
 
 /// Pantalla de administración con pestañas para:
 /// 1. Gestión de usuarios
 /// 2. Gestión de dispositivos
-/// 3. Visualización de base de datos
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
 
@@ -27,18 +27,17 @@ class _AdminScreenState extends State<AdminScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController =
+        TabController(length: 2, vsync: this); // Ahora solo 2 pestañas
     _checkAdminStatus();
     _loadInitialData();
   }
 
-  /// Verifica si el usuario actual es administrador
   void _checkAdminStatus() {
     final currentUser = _userProfileService.currentProfile.value;
-    _isAdmin.value = currentUser != null && currentUser.isAdmin;
+    _isAdmin.value = currentUser?.isAdmin ?? false;
   }
 
-  /// Carga datos iniciales
   void _loadInitialData() {
     if (_isAdmin.value) {
       _adminService.fetchAllUsers();
@@ -57,13 +56,9 @@ class _AdminScreenState extends State<AdminScreen>
           title: const Text('Panel de Administración'),
           bottom: TabBar(
             controller: _tabController,
-            labelColor: AppColors.primary,
-            unselectedLabelColor: AppColors.textSecondary,
-            indicatorColor: AppColors.primary,
             tabs: const [
-              Tab(text: 'Usuarios'),
-              Tab(text: 'Dispositivos'),
-              Tab(text: 'Base de Datos'),
+              Tab(icon: Icon(Icons.people), text: 'Usuarios'),
+              Tab(icon: Icon(Icons.devices), text: 'Dispositivos'),
             ],
           ),
         ),
@@ -72,7 +67,6 @@ class _AdminScreenState extends State<AdminScreen>
           children: [
             _buildUserManagementTab(),
             _buildDeviceManagementTab(),
-            _buildDatabaseViewTab(),
           ],
         ),
       );
@@ -173,7 +167,9 @@ class _AdminScreenState extends State<AdminScreen>
             ),
           ],
         ),
-        onTap: () => _showUserDetails(user),
+        onTap: () {
+          Get.to(() => UserSessionsHistoryScreen(user: user));
+        },
       ),
     );
   }

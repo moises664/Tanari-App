@@ -3,17 +3,18 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:logging/logging.dart';
+import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tanari_app/src/controllers/bluetooth/ble.controller.dart';
-import 'package:tanari_app/src/controllers/services/admin_services.dart';
-import 'package:tanari_app/src/controllers/services/auth_service.dart';
-import 'package:tanari_app/src/controllers/services/operation_data_service.dart';
-import 'package:tanari_app/src/controllers/services/user_profile_service.dart';
-import 'package:tanari_app/src/controllers/services/ugv_service.dart';
 import 'package:tanari_app/src/routes/app_pages.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
 import 'package:tanari_app/src/screens/home/home_screen.dart';
 import 'package:tanari_app/src/screens/login/welcome_screen.dart';
+import 'package:tanari_app/src/services/api/admin_services.dart';
+import 'package:tanari_app/src/services/api/auth_service.dart';
+import 'package:tanari_app/src/services/api/operation_data_service.dart';
+import 'package:tanari_app/src/services/api/ugv_service.dart';
+import 'package:tanari_app/src/services/api/user_profile_service.dart';
 
 const appTitle = 'TAnaRi';
 // URL y clave anónima de Supabase para la conexión a la base de datos.
@@ -28,6 +29,10 @@ final _logger = Logger('Main'); // Logger para la función principal.
 void main() async {
   // 1. Asegura que los bindings de Flutter estén inicializados.
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Configurar el token de Mapbox antes de iniciar la app
+  MapboxOptions.setAccessToken(
+      "pk.eyJ1IjoibW9pc2Vzcm0wMCIsImEiOiJjbWVwYTFqemEwZDM3MmlxNnpudWV3MXdqIn0.NbT4KIYybi1fBGc21Xjvew");
 
   // 2. Configura el sistema de logging para la aplicación.
   _configureLogging();
@@ -95,7 +100,7 @@ void _initializeDependencies() {
   Get.put(AuthService(), permanent: true);
 
   // 4. Registrar AdminService. Depende de SupabaseClient y UserProfileService.
-  Get.put(AdminService(), permanent: true); // <--- Nuevo servicio
+  Get.put(AdminService(), permanent: true); //
 
   // 5. Registrar otros servicios de la aplicación.
   Get.put(BleController(), permanent: true);

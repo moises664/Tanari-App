@@ -119,12 +119,19 @@
 	<string>Esta aplicación necesita acceso a tu ubicación en todo momento para el monitoreo continuo de dispositivos y rutas UGV, incluso cuando la aplicación no está en uso activo.</string>
 	<!-- FIN DE PERMISOS DE PRIVACIDAD PARA LOCALIZACIÓN -->
 
+	<!-- INICIO USO DE MAPBOX CON LA API KEY -->
+	<key>MBXAccessToken</key>
+	<string>pk.eyJ1IjoibW9pc2Vzcm0wMCIsImEiOiJjbWVwYTFqemEwZDM3MmlxNnpudWV3MXdqIn0.NbT4KIYybi1fBGc21Xjvew</string>
+	<!-- FIN USO DE MAPBOX CON LA API KEY -->
+
 	<!-- INICIO DE PERMISOS DE PRIVACIDAD PARA BLUETOOTH -->
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Esta aplicación necesita acceso a Bluetooth para escanear y conectarse a dispositivos externos (UGV y sensores) para el monitoreo de operaciones.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Esta aplicación necesita acceso a Bluetooth para conectarse a dispositivos periféricos cercanos.</string>
 	<!-- FIN DE PERMISOS DE PRIVACIDAD PARA BLUETOOTH -->
+	<key>MBXAccessToken</key>
+	<string>pk.eyJ1IjoibW9pc2Vzcm0wMCIsImEiOiJjbWVwYTFqemEwZDM3MmlxNnpudWV3MXdqIn0.NbT4KIYybi1fBGc21Xjvew</string>
 
 </dict>
 </plist>
