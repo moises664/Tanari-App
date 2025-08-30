@@ -1,7 +1,7 @@
 name: tanari_app
 description: "Una aplicacion desarrollada para el Trabajo de Fin de Grado de la UNEXPO, donde la tematica es un Dispositivo portatil para monitoreo de gases de efecto invernadero con acople a un vehiculo terrestre no tripulado (UGV). Esta aplicacion es una de las 3 partes del proyecto llamado TANARi. Esta nos permitira visualizar, controlar, almacenar y gestionar por usuario la data en el monitoreo GEI..."
 publish_to: 'none'
-version: 1.4.0
+version: 1.5.0
 
 environment:
   sdk: ">=2.19.0 <4.0.0"
