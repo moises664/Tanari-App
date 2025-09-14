@@ -95,13 +95,6 @@ class ComunicacionBleScreen extends StatelessWidget {
             // Obtiene el RSSI actual del dispositivo.
             final rssi = bleController.rssiValues[deviceId];
 
-            // Determina el estado del LED.
-            // El estado del LED solo se mostrará como 'encendido' (true) si el dispositivo
-            // es el UGV y su ledStateUGV en el controlador es true.
-            final bool isLedOnForThisDevice =
-                (deviceId == bleController.ugvDeviceId) &&
-                    bleController.ledStateUGV.value;
-
             return Card(
               margin: const EdgeInsets.symmetric(vertical: 4.0),
               elevation: 2,
@@ -111,8 +104,6 @@ class ComunicacionBleScreen extends StatelessWidget {
                 device: device,
                 isConnected: isConnected,
                 rssi: rssi,
-                isLedOn:
-                    isLedOnForThisDevice, // Pasa el estado del LED específico para este dispositivo.
 
                 // Botón de Conectar: solo activo si el dispositivo no está conectado.
                 onConnect: isConnected

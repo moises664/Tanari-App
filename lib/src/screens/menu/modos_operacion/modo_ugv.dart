@@ -8,9 +8,6 @@ import 'package:logger/logger.dart';
 import 'package:tanari_app/src/screens/menu/modos_historial/ugv_routes_screen.dart';
 import 'package:tanari_app/src/services/api/operation_data_service.dart';
 
-//==============================================================================
-// PANTALLA DE CONTROL DEL UGV
-//==============================================================================
 class ModoUgv extends StatefulWidget {
   const ModoUgv({super.key});
   @override
@@ -18,30 +15,23 @@ class ModoUgv extends StatefulWidget {
 }
 
 class _ModoUgvState extends State<ModoUgv> {
-  //--------------------------------------------------------------------------
-  // INYECCIÓN DE DEPENDENCIAS Y LOGGING
-  //--------------------------------------------------------------------------
   final BleController bleController = Get.find<BleController>();
   final OperationDataService _operationDataService =
       Get.find<OperationDataService>();
   final Logger _logger = Logger();
 
-  //--------------------------------------------------------------------------
-  // VARIABLES DE ESTADO DE LA PANTALLA
-  //--------------------------------------------------------------------------
   String? _lastSentDirectionalCommand;
   final Rx<OperationSession?> _currentActiveSession =
       Rx<OperationSession?>(null);
   final TextEditingController _routeNameController = TextEditingController();
-  final TextEditingController _routeDescController = TextEditingController();
+  final TextEditingController _routeOriginDescController =
+      TextEditingController();
   final RxBool _isRecordingRoute = false.obs;
   final Rx<OperationSession?> _selectedRoute = Rx<OperationSession?>(null);
   final RxBool _isAutoModeActive = false.obs;
   final RxBool _isAwaitingEndOfRoute = false.obs;
+  Timer? _obstacleDialogTimer;
 
-  //--------------------------------------------------------------------------
-  // MÉTODOS DEL CICLO DE VIDA
-  //--------------------------------------------------------------------------
   @override
   void initState() {
     super.initState();
@@ -62,14 +52,25 @@ class _ModoUgvState extends State<ModoUgv> {
       }
     });
 
-    ever(bleController.receivedData, (String? data) {
-      if (data == BleController.endAutoMode && mounted) {
-        _logger
-            .i("Recibido 'T' del UGV. Finalizando modo automático en la UI.");
-        _isAutoModeActive.value = false;
-        _isAwaitingEndOfRoute.value = false;
-        _selectedRoute.value = null;
-        Get.snackbar("Ruta Finalizada", "El UGV ha completado el recorrido.");
+    ever(bleController.activeRouteNumber, (routeNum) {
+      if (routeNum == 0 &&
+          (_isAutoModeActive.value || _isAwaitingEndOfRoute.value)) {
+        if (mounted) {
+          _logger
+              .i("Número de ruta es 0, finalizando modo automático en la UI.");
+          _isAutoModeActive.value = false;
+          _isAwaitingEndOfRoute.value = false;
+          _selectedRoute.value = null;
+          Get.snackbar(
+              "Modo Automático Finalizado", "El UGV ha completado su tarea.");
+        }
+      }
+    });
+
+    ever(bleController.obstacleAlert, (showAlert) {
+      if (showAlert && mounted) {
+        _showObstacleDialog();
+        bleController.obstacleAlert.value = false;
       }
     });
   }
@@ -77,18 +78,64 @@ class _ModoUgvState extends State<ModoUgv> {
   @override
   void dispose() {
     _routeNameController.dispose();
-    _routeDescController.dispose();
+    _routeOriginDescController.dispose();
+    _obstacleDialogTimer?.cancel();
     super.dispose();
   }
 
-  //============================================================================
-  // SECCIÓN: LÓGICA DE GRABACIÓN DE RUTAS (MODIFICADA)
-  //============================================================================
+  void _showObstacleDialog() {
+    _obstacleDialogTimer?.cancel();
+    _obstacleDialogTimer = Timer(const Duration(seconds: 30), () {
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+        Get.snackbar(
+          "Tiempo Expirado",
+          "Regresando al inicio por defecto.",
+          backgroundColor: AppColors.warning,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 4),
+        );
+      }
+    });
 
-  /// Muestra un diálogo para que el usuario ingrese el nombre y descripción de una nueva ruta.
+    Get.dialog(
+      AlertDialog(
+        title: const Text('¡Obstáculo Detectado!'),
+        content: const Text(
+            'El UGV ha encontrado un obstáculo en la ruta. ¿Qué desea hacer?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              _obstacleDialogTimer?.cancel();
+              Get.back();
+              bleController.sendReturnToOrigin();
+            },
+            child: Text('Regresar al Origen',
+                style: TextStyle(color: AppColors.warning)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              _obstacleDialogTimer?.cancel();
+              Get.back();
+              bleController.sendStopAndStay();
+            },
+            child: const Text('Detener Recorrido'),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+  }
+
   Future<void> _showCreateRouteDialog() async {
     _routeNameController.clear();
-    _routeDescController.clear();
+    _routeOriginDescController.clear();
+
+    if (bleController.gpsHasFix.value) {
+      _routeOriginDescController.text =
+          'Coordenadas GPS: ${bleController.latitude.value.toPrecision(6)}, ${bleController.longitude.value.toPrecision(6)}';
+    }
+
     Get.dialog(
       AlertDialog(
         title: const Text('Crear Nueva Ruta'),
@@ -99,10 +146,12 @@ class _ModoUgvState extends State<ModoUgv> {
               controller: _routeNameController,
               decoration: const InputDecoration(labelText: 'Nombre de la Ruta'),
             ),
+            const SizedBox(height: 10),
             TextField(
-              controller: _routeDescController,
-              decoration:
-                  const InputDecoration(labelText: 'Descripción (Opcional)'),
+              controller: _routeOriginDescController,
+              decoration: const InputDecoration(
+                  labelText: 'Descripción del Punto de Origen'),
+              maxLines: 2,
             ),
           ],
         ),
@@ -124,41 +173,36 @@ class _ModoUgvState extends State<ModoUgv> {
     );
   }
 
-  /// Inicia el proceso de grabación de una ruta.
   Future<void> _startRouteRecording() async {
     if (bleController.memoryStatus.value) {
       Get.snackbar('Memoria Llena', 'No se puede grabar una nueva ruta.');
       return;
     }
 
-    // Crea una sesión temporal en la BD con modo 'recording' pero SIN indicador.
     final session = await _operationDataService.createOperationSession(
       operationName: _routeNameController.text,
-      description: _routeDescController.text,
+      description: _routeOriginDescController.text,
       mode: 'recording',
-      // El indicador se dejará nulo hasta que el UGV lo confirme.
     );
 
     if (session != null && bleController.ugvDeviceId != null) {
       _currentActiveSession.value = session;
       _isRecordingRoute.value = true;
-      bleController.sendData(bleController.ugvDeviceId!,
-          BleController.startRecording); // Envía 'G'
+      bleController.sendData(
+          bleController.ugvDeviceId!, BleController.startRecording);
       Get.snackbar('Grabación Iniciada', 'Mueva el UGV y guarde los puntos.');
     }
   }
 
-  /// Envía el comando 'W' al UGV para que guarde un punto de la ruta.
   void _recordPoint() {
     if (_isRecordingRoute.value && bleController.ugvDeviceId != null) {
       bleController.sendData(
-          bleController.ugvDeviceId!, BleController.recordPoint); // Envía 'W'
+          bleController.ugvDeviceId!, BleController.recordPoint);
       Get.snackbar('Punto Guardado', 'Punto de la ruta registrado.',
           duration: const Duration(seconds: 1));
     }
   }
 
-  /// Finaliza el proceso de grabación y espera la confirmación del UGV.
   Future<void> _finishRecording() async {
     if (!_isRecordingRoute.value ||
         bleController.ugvDeviceId == null ||
@@ -166,11 +210,9 @@ class _ModoUgvState extends State<ModoUgv> {
       return;
     }
 
-    // 1. Envía el comando 'E' al UGV para que finalice y guarde la ruta.
     bleController.sendData(
         bleController.ugvDeviceId!, BleController.endRecording);
 
-    // Muestra un diálogo de espera.
     Get.dialog(
       const AlertDialog(
         title: Text('Guardando Ruta'),
@@ -185,16 +227,13 @@ class _ModoUgvState extends State<ModoUgv> {
       barrierDismissible: false,
     );
 
-    // 2. Inicia un listener para esperar el indicador de ruta del UGV.
     StreamSubscription? subscription;
     Timer? timeout;
 
-    // Timeout por si el UGV no responde.
     timeout = Timer(const Duration(seconds: 10), () {
       subscription?.cancel();
-      if (Get.isDialogOpen ?? false) Get.back(); // Cierra el diálogo
+      if (Get.isDialogOpen ?? false) Get.back();
       Get.snackbar('Error', 'El UGV no respondió a tiempo.');
-      // Opcional: podrías eliminar la sesión temporal de la BD aquí.
       _resetRecordingState();
     });
 
@@ -202,12 +241,8 @@ class _ModoUgvState extends State<ModoUgv> {
       if (indicator != null) {
         timeout?.cancel();
         subscription?.cancel();
-        if (Get.isDialogOpen ?? false) Get.back(); // Cierra el diálogo
+        if (Get.isDialogOpen ?? false) Get.back();
 
-        _logger.i(
-            "Confirmación recibida. Actualizando sesión ${_currentActiveSession.value!.id} con indicador $indicator");
-
-        // 3. Actualiza la sesión en la BD con el indicador recibido.
         await _operationDataService.updateOperationSession(
           sessionId: _currentActiveSession.value!.id,
           newMode: 'recorded',
@@ -220,24 +255,17 @@ class _ModoUgvState extends State<ModoUgv> {
     });
   }
 
-  /// Resetea el estado de grabación de la UI.
   void _resetRecordingState() {
     _isRecordingRoute.value = false;
     _currentActiveSession.value = null;
   }
 
-  //============================================================================
-  // SECCIÓN: LÓGICA DEL PANEL DE CONFIGURACIÓN Y OTROS (SIN CAMBIOS)
-  //============================================================================
-
-  /// Envía un comando para establecer la velocidad del UGV.
   void _setSpeed(int speed) {
     if (bleController.ugvDeviceId != null) {
       bleController.sendData(bleController.ugvDeviceId!, 'SET_VEL:$speed');
     }
   }
 
-  /// Envía un comando para establecer el tiempo de espera en los puntos de una ruta.
   void _setWaitTime(int milliseconds) {
     if (bleController.ugvDeviceId != null) {
       bleController.sendData(
@@ -245,15 +273,12 @@ class _ModoUgvState extends State<ModoUgv> {
     }
   }
 
-  /// Muestra un diálogo para la configuración manual de velocidad y tiempo de espera.
   Future<void> _showConfigDialog() async {
     final speedController = TextEditingController(
         text: bleController.currentSpeed.value.toString());
     final waitTimeController = TextEditingController();
-    final selectedUnit =
-        'Segundos'.obs; // Estado para el selector de unidad de tiempo
+    final selectedUnit = 'Segundos'.obs;
 
-    // Pre-llena el campo de tiempo con el valor actual convertido a segundos.
     if (bleController.currentWaitTime.value >= 1000) {
       waitTimeController.text =
           (bleController.currentWaitTime.value / 1000).toStringAsFixed(0);
@@ -310,28 +335,20 @@ class _ModoUgvState extends State<ModoUgv> {
         actions: [
           TextButton(
             onPressed: () => Get.back(),
-            style: TextButton.styleFrom(
-              backgroundColor: AppColors.secondary1,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.only(
-                  top: 10, bottom: 10, left: 20, right: 20),
-            ),
             child: const Text('Cancelar'),
           ),
           ElevatedButton(
             onPressed: () {
-              // Procesa y envía la velocidad.
               final speed = int.tryParse(speedController.text);
               if (speed != null && speed > 0) {
                 _setSpeed(speed);
               }
 
-              // Procesa, convierte a ms y envía el tiempo de espera.
               final waitTimeValue = int.tryParse(waitTimeController.text);
               if (waitTimeValue != null && waitTimeValue >= 0) {
-                int milliseconds = waitTimeValue * 1000; // a ms
+                int milliseconds = waitTimeValue * 1000;
                 if (selectedUnit.value == 'Minutos') {
-                  milliseconds *= 60; // a ms
+                  milliseconds *= 60;
                 }
                 _setWaitTime(milliseconds);
               }
@@ -339,12 +356,6 @@ class _ModoUgvState extends State<ModoUgv> {
               Get.snackbar('Configuración Enviada',
                   'Los nuevos valores han sido enviados al UGV.');
             },
-            style: TextButton.styleFrom(
-              backgroundColor: AppColors.secondary1,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.only(
-                  top: 10, bottom: 10, left: 20, right: 20),
-            ),
             child: const Text('Guardar'),
           ),
         ],
@@ -352,7 +363,109 @@ class _ModoUgvState extends State<ModoUgv> {
     );
   }
 
-  /// Muestra un diálogo con los datos extraídos en una tabla bien formateada.
+  // --- INICIO DE CAMBIO: Lógica de extracción de datos modificada ---
+  Future<void> _extractData() async {
+    if (bleController.ugvDeviceId == null) return;
+
+    // 1. Pedir nombre y descripción para la nueva sesión
+    String? name;
+    String? description;
+
+    final confirmed = await Get.dialog<bool>(
+      AlertDialog(
+        title: const Text('Nueva Sesión para Datos Recuperados'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              decoration: const InputDecoration(
+                  labelText: 'Nombre de la Sesión (Obligatorio)'),
+              onChanged: (value) => name = value,
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              decoration:
+                  const InputDecoration(labelText: 'Descripción (Opcional)'),
+              onChanged: (value) => description = value,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(result: false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (name != null && name!.trim().isNotEmpty) {
+                Get.back(result: true);
+              } else {
+                Get.snackbar('Error', 'El nombre de la sesión es obligatorio.');
+              }
+            },
+            child: const Text('Extraer y Guardar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    // 2. Iniciar el proceso de extracción desde el UGV
+    bleController.ugvDatabaseData.clear();
+    bleController.extractionStatus.value = null;
+    bleController.isExtractingData.value = true;
+
+    bleController.sendData(
+        bleController.ugvDeviceId!, BleController.extractData);
+
+    Get.dialog(
+      const AlertDialog(
+        title: Text('Extrayendo Datos'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 20),
+          Text('Recibiendo datos del UGV...'),
+        ]),
+      ),
+      barrierDismissible: false,
+    );
+
+    Timer(const Duration(seconds: 15), () {
+      if (bleController.isExtractingData.value) {
+        bleController.isExtractingData.value = false;
+        bleController.extractionStatus.value = 'error';
+        if (Get.isDialogOpen ?? false) Get.back();
+        Get.snackbar(
+            'Error de Extracción', 'No se recibieron datos del UGV a tiempo.',
+            backgroundColor: AppColors.error, colorText: Colors.white);
+      }
+    });
+
+    // 3. Esperar el resultado y subir a la nueva tabla
+    once(bleController.extractionStatus, (status) async {
+      if (status != null) {
+        if (Get.isDialogOpen ?? false) Get.back();
+
+        if (status == 'completed') {
+          final data = List<String>.from(bleController.ugvDatabaseData);
+          _showExtractedDataDialog(data);
+          await _operationDataService.uploadRecoveredDataToNewTable(data,
+              name: name!,
+              description:
+                  description ?? 'Datos recuperados del UGV en modo manual.');
+        } else if (status == 'empty') {
+          Get.dialog(AlertDialog(
+            title: const Text('Información'),
+            content: const Text('La base de datos del UGV está vacía.'),
+            actions: [TextButton(onPressed: Get.back, child: const Text('OK'))],
+          ));
+        }
+      }
+    });
+  }
+  // --- FIN DE CAMBIO ---
+
   void _showExtractedDataDialog(List<String> data) {
     if (data.isEmpty) {
       Get.snackbar(
@@ -366,26 +479,24 @@ class _ModoUgvState extends State<ModoUgv> {
       final values = line.split(';');
       final cleanedValues = values.map((v) => v.trim()).toList();
 
-      if (cleanedValues.length == 6) {
-        tableRows.add(DataRow(cells: [
-          DataCell(Text(cleanedValues[0])),
-          DataCell(Text(cleanedValues[1])),
-          DataCell(Text(cleanedValues[2])),
-          DataCell(Text(cleanedValues[3])),
-          DataCell(Text(cleanedValues[4])),
-          DataCell(Text(cleanedValues[5])),
-        ]));
-      } else if (cleanedValues.length == 4) {
-        tableRows.add(DataRow(cells: [
-          DataCell(const Text('-')),
-          DataCell(const Text('-')),
-          DataCell(Text(cleanedValues[0])),
-          DataCell(Text(cleanedValues[1])),
-          DataCell(Text(cleanedValues[2])),
-          DataCell(Text(cleanedValues[3])),
-        ]));
-      } else {
-        _logger.w("Línea de datos con formato incorrecto ignorada: '$line'");
+      if (cleanedValues.length >= 4) {
+        List<DataCell> cells = [];
+        if (cleanedValues.length == 6) {
+          cells.add(DataCell(Text(cleanedValues[0]))); // Ruta
+          cells.add(DataCell(Text(cleanedValues[1]))); // Punto
+          cells.add(DataCell(Text(cleanedValues[2]))); // CO2
+          cells.add(DataCell(Text(cleanedValues[3]))); // CH4
+          cells.add(DataCell(Text(cleanedValues[4]))); // Temp
+          cells.add(DataCell(Text(cleanedValues[5]))); // Hum
+        } else {
+          cells.add(const DataCell(Text('-')));
+          cells.add(const DataCell(Text('-')));
+          cells.add(DataCell(Text(cleanedValues[0]))); // CO2
+          cells.add(DataCell(Text(cleanedValues[1]))); // CH4
+          cells.add(DataCell(Text(cleanedValues[2]))); // Temp
+          cells.add(DataCell(Text(cleanedValues[3]))); // Hum
+        }
+        tableRows.add(DataRow(cells: cells));
       }
     }
 
@@ -401,36 +512,16 @@ class _ModoUgvState extends State<ModoUgv> {
         content: SizedBox(
           width: double.maxFinite,
           child: SingleChildScrollView(
-            scrollDirection: Axis.vertical,
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
-                columnSpacing: 15,
-                headingRowColor:
-                    WidgetStateProperty.all(AppColors.primary.withOpacity(0.1)),
                 columns: const [
-                  DataColumn(
-                      label: Text('Ruta',
-                          style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(
-                      label: Text('Punto',
-                          style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(
-                      label: Text('CO2\n(ppm)',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center)),
-                  DataColumn(
-                      label: Text('CH4\n(ppm)',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center)),
-                  DataColumn(
-                      label: Text('Temp\n(°C)',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center)),
-                  DataColumn(
-                      label: Text('Hum\n(%)',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center)),
+                  DataColumn(label: Text('Ruta')),
+                  DataColumn(label: Text('Punto')),
+                  DataColumn(label: Text('CO2')),
+                  DataColumn(label: Text('CH4')),
+                  DataColumn(label: Text('Temp')),
+                  DataColumn(label: Text('Hum')),
                 ],
                 rows: tableRows,
               ),
@@ -448,59 +539,6 @@ class _ModoUgvState extends State<ModoUgv> {
     );
   }
 
-  /// Envía el comando 'X' y gestiona el proceso de extracción de datos.
-  void _extractData() {
-    if (bleController.ugvDeviceId == null) return;
-
-    bleController.ugvDatabaseData.clear();
-    bleController.extractionStatus.value = null;
-    bleController.isExtractingData.value = true;
-
-    bleController.sendData(
-        bleController.ugvDeviceId!, BleController.extractData);
-
-    Get.dialog(
-      AlertDialog(
-        title: const Text('Extrayendo Datos'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: const [
-          CircularProgressIndicator(),
-          SizedBox(height: 20),
-          Text('Recibiendo datos del UGV...'),
-        ]),
-      ),
-      barrierDismissible: false,
-    );
-
-    Timer(const Duration(seconds: 5), () {
-      if (bleController.isExtractingData.value) {
-        bleController.isExtractingData.value = false;
-        bleController.extractionStatus.value = 'error';
-        if (Get.isDialogOpen ?? false) Get.back();
-        Get.snackbar(
-            'Error de Extracción', 'No se recibieron datos del UGV a tiempo.',
-            backgroundColor: AppColors.error, colorText: Colors.white);
-      }
-    });
-
-    once(bleController.extractionStatus, (status) {
-      if (status != null) {
-        if (Get.isDialogOpen ?? false) Get.back();
-
-        if (status == 'completed') {
-          _showExtractedDataDialog(
-              List<String>.from(bleController.ugvDatabaseData));
-        } else if (status == 'empty') {
-          Get.dialog(AlertDialog(
-            title: const Text('Información'),
-            content: const Text('Base de datos del UGV vacia'),
-            actions: [TextButton(onPressed: Get.back, child: const Text('OK'))],
-          ));
-        }
-      }
-    });
-  }
-
-  /// Navega a la pantalla de selección de rutas.
   Future<void> _showUgvRoutesScreen() async {
     if (_isAutoModeActive.value) {
       Get.snackbar('Acción no permitida',
@@ -516,7 +554,6 @@ class _ModoUgvState extends State<ModoUgv> {
     }
   }
 
-  /// Gestiona el botón de ejecutar/cancelar ruta.
   void _handleAutoButton() {
     if (bleController.ugvDeviceId == null) return;
     if (_isAutoModeActive.value) {
@@ -535,7 +572,6 @@ class _ModoUgvState extends State<ModoUgv> {
     }
   }
 
-  /// Envía el comando de interrupción/emergencia 'P'.
   void _interruptMovement() {
     if (bleController.ugvDeviceId != null) {
       bleController.sendData(
@@ -547,7 +583,6 @@ class _ModoUgvState extends State<ModoUgv> {
     }
   }
 
-  /// Inicia el movimiento en una dirección.
   void _startMovement(String command) {
     if (bleController.ugvDeviceId != null && !_isAutoModeActive.value) {
       if (_lastSentDirectionalCommand != command) {
@@ -557,7 +592,6 @@ class _ModoUgvState extends State<ModoUgv> {
     }
   }
 
-  /// Envía el comando de detención 'S'.
   void _stopMovement() {
     if (bleController.ugvDeviceId != null && !_isAutoModeActive.value) {
       bleController.sendData(bleController.ugvDeviceId!, BleController.stop);
@@ -565,9 +599,6 @@ class _ModoUgvState extends State<ModoUgv> {
     }
   }
 
-  //============================================================================
-  // SECCIÓN: CONSTRUCCIÓN DE LA INTERFAZ DE USUARIO (UI)
-  //============================================================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -631,11 +662,8 @@ class _ModoUgvState extends State<ModoUgv> {
     } else if (batteryLevel > 40) {
       batteryIcon = Icons.battery_std;
       iconColor = AppColors.warning;
-    } else if (batteryLevel > 15) {
-      batteryIcon = Icons.battery_alert;
-      iconColor = AppColors.error;
     } else {
-      batteryIcon = Icons.battery_alert_sharp;
+      batteryIcon = Icons.battery_alert;
       iconColor = AppColors.error;
     }
 
@@ -644,10 +672,7 @@ class _ModoUgvState extends State<ModoUgv> {
       decoration: BoxDecoration(
         color: iconColor.withAlpha(50),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: iconColor,
-          width: 1.5,
-        ),
+        border: Border.all(color: iconColor, width: 1.5),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -744,6 +769,19 @@ class _ModoUgvState extends State<ModoUgv> {
           Obx(() => _buildConfigItem(
               'Memoria: ${bleController.memoryStatus.value ? "Llena" : "Disponible"}',
               isWarning: bleController.memoryStatus.value)),
+          Obx(() => Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _buildConfigItem('Evasión de Obstáculos:'),
+                  Switch(
+                    value: bleController.evasionModeActive.value,
+                    onChanged: (bleController.isUgvConnected.value)
+                        ? (value) => bleController.sendEvadeMode(value)
+                        : null,
+                    activeColor: AppColors.accentColor,
+                  ),
+                ],
+              )),
           const SizedBox(height: 10),
           SizedBox(
               width: double.infinity,
@@ -797,6 +835,10 @@ class _ModoUgvState extends State<ModoUgv> {
                     .textTheme
                     .titleLarge
                     ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Obx(() => _isAutoModeActive.value
+                ? _buildAutoStatusPanel()
+                : Container()),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
@@ -843,6 +885,46 @@ class _ModoUgvState extends State<ModoUgv> {
             }),
           ],
         ));
+  }
+
+  Widget _buildAutoStatusPanel() {
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.info.withAlpha(26),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.info, width: 1),
+      ),
+      child: Obx(() {
+        final route = bleController.activeRouteNumber.value;
+        final point = bleController.activePointNumber.value;
+        final arrived =
+            bleController.arrivedAtPoint.value == point && point > 0;
+        final statusText = arrived
+            ? "En el Punto $point"
+            : (point > 0 ? "Hacia el Punto $point" : "Iniciando...");
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              arrived ? Icons.location_on : Icons.route,
+              color: AppColors.info,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              "Ruta $route - $statusText",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppColors.info,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        );
+      }),
+    );
   }
 
   Widget _buildRecordingPanel() {
@@ -905,7 +987,7 @@ class _ModoUgvState extends State<ModoUgv> {
                       onPressed:
                           _isRecordingRoute.value ? _finishRecording : null,
                       style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accent,
+                          backgroundColor: AppColors.error,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 15)),
                     ),
@@ -962,21 +1044,6 @@ class _ModoUgvState extends State<ModoUgv> {
               opacity: controlsEnabled ? 1.0 : 0.4,
               child: Column(
                 children: [
-                  if (!controlsEnabled)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12.0),
-                      child: Text(
-                        _isAutoModeActive.value
-                            ? 'Controles deshabilitados en modo automático.'
-                            : _isAwaitingEndOfRoute.value
-                                ? 'Esperando finalización de ruta...'
-                                : 'Conecte el UGV para activar los controles.',
-                        style: TextStyle(
-                            color: AppColors.backgroundBlack,
-                            fontWeight: FontWeight.bold),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
                   Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                     _buildDirectionButton(Icons.arrow_upward,
                         BleController.moveForward, controlsEnabled)

@@ -8,16 +8,6 @@ import 'package:logger/logger.dart';
 import 'package:tanari_app/src/services/api/operation_data_service.dart';
 import 'package:tanari_app/src/screens/menu/modos_historial/ugv_routes_screen.dart';
 
-//==============================================================================
-// PANTALLA DE MODO ACOPLE
-//==============================================================================
-/// Pantalla principal para el control y monitoreo en Modo Acople (DP + UGV).
-///
-/// Esta pantalla unifica las funcionalidades clave del Modo DP (monitoreo de sensores)
-/// y Modo UGV (control manual y autónomo). La interfaz se activa únicamente
-/// cuando el sistema detecta un acople físico entre ambos dispositivos,
-/// permitiendo la grabación de datos de sensores georreferenciados durante
-/// la operación del UGV.
 class ModoAcople extends StatefulWidget {
   const ModoAcople({super.key});
 
@@ -26,125 +16,229 @@ class ModoAcople extends StatefulWidget {
 }
 
 class _ModoAcopleState extends State<ModoAcople> {
-  //----------------------------------------------------------------------------
-  // SECCIÓN: INYECCIÓN DE DEPENDENCIAS Y LOGGING
-  //----------------------------------------------------------------------------
   final BleController bleController = Get.find<BleController>();
   final OperationDataService _operationDataService =
       Get.find<OperationDataService>();
   final Logger _logger = Logger();
 
-  //----------------------------------------------------------------------------
-  // SECCIÓN: VARIABLES DE ESTADO DE LA PANTALLA
-  //----------------------------------------------------------------------------
-
-  /// Almacena el último comando direccional enviado para evitar el envío redundante de datos.
   String? _lastSentDirectionalCommand;
-
-  /// Sesión de operación activa en la base de datos. Es `null` si no hay grabación activa.
   final Rx<OperationSession?> _currentActiveSession =
       Rx<OperationSession?>(null);
-
-  /// Almacena la ruta que el usuario ha seleccionado para su posterior ejecución autónoma.
   final Rx<OperationSession?> _selectedRoute = Rx<OperationSession?>(null);
-
-  /// Estado reactivo que indica si el UGV está en modo de ejecución automática.
   final RxBool _isAutoModeActive = false.obs;
-
-  /// Estado reactivo que indica si se ha cancelado una ruta y se está esperando
-  /// que el UGV termine su recorrido de vuelta al punto de inicio.
   final RxBool _isAwaitingEndOfRoute = false.obs;
+  Timer? _recordingTimer;
+  Timer? _obstacleDialogTimer;
 
-  //----------------------------------------------------------------------------
-  // SECCIÓN: MÉTODOS DEL CICLO DE VIDA (Lifecycle Methods)
-  //----------------------------------------------------------------------------
   @override
   void initState() {
     super.initState();
     _lastSentDirectionalCommand = BleController.stop;
 
-    // Listener reactivo que se dispara si el UGV o el DP se desconectan.
+    // --- INICIO DE CAMBIO: Lógica de desconexión restaurada ---
+    // Si hay una sesión activa y alguno de los dispositivos se desconecta, se cierra la sesión.
     everAll([bleController.isUgvConnected, bleController.isPortableConnected],
-        (_) {
-      // Si alguno de los dos se desconecta, reseteamos la UI del modo acople.
-      if ((!bleController.isUgvConnected.value ||
-              !bleController.isPortableConnected.value) &&
-          mounted) {
-        _logger.w(
-            "Un dispositivo se ha desconectado. Reseteando estados de Acople.");
-        // Si había una sesión de grabación activa, se finaliza para no dejarla abierta.
-        if (_currentActiveSession.value != null) {
-          _operationDataService
-              .endOperationSession(_currentActiveSession.value!.id);
+        (callback) {
+      final isUgvConn = bleController.isUgvConnected.value;
+      final isDpConn = bleController.isPortableConnected.value;
+
+      if (_currentActiveSession.value != null && (!isUgvConn || !isDpConn)) {
+        if (mounted) {
+          Get.snackbar(
+            "Desconexión Detectada",
+            "La sesión de monitoreo se ha cerrado por seguridad.",
+            backgroundColor: AppColors.error,
+            colorText: Colors.white,
+          );
+          _stopSensorRecording();
         }
-        // Resetea todos los estados de la UI a sus valores iniciales.
-        _currentActiveSession.value = null;
-        _isAutoModeActive.value = false;
-        _selectedRoute.value = null;
-        _isAwaitingEndOfRoute.value = false;
+      }
+    });
+    // --- FIN DE CAMBIO ---
+
+    ever(bleController.activeRouteNumber, (routeNum) {
+      if (routeNum == 0 &&
+          (_isAutoModeActive.value || _isAwaitingEndOfRoute.value)) {
+        if (mounted) {
+          _logger.i(
+              "Número de ruta es 0, finalizando modo automático en la UI de Acople.");
+          _isAutoModeActive.value = false;
+          _isAwaitingEndOfRoute.value = false;
+          _selectedRoute.value = null;
+          Get.snackbar(
+              "Modo Automático Finalizado", "El UGV ha completado su tarea.");
+        }
       }
     });
 
-    // Listener que reacciona a los datos de estado recibidos del UGV.
-    ever(bleController.receivedData, (String? data) {
-      // Si el UGV envía 'T', significa que la ruta automática ha terminado.
-      if (data == BleController.endAutoMode && mounted) {
-        _logger
-            .i("Recibido 'T' del UGV. Finalizando modo automático en la UI.");
-        _isAutoModeActive.value = false;
-        _isAwaitingEndOfRoute.value = false;
-        _selectedRoute.value = null;
-        Get.snackbar("Ruta Finalizada", "El UGV ha completado el recorrido.");
+    ever(_currentActiveSession, (OperationSession? session) {
+      if (session != null) {
+        _startPeriodicRecording();
+      } else {
+        _stopPeriodicRecording();
+      }
+    });
+
+    ever(bleController.obstacleAlert, (showAlert) {
+      if (showAlert && mounted) {
+        _showObstacleDialog();
+        bleController.obstacleAlert.value = false;
       }
     });
   }
 
-  //============================================================================
-  // SECCIÓN: LÓGICA DE SESIÓN Y GRABACIÓN (CON CORRECCIÓN)
-  //============================================================================
+  @override
+  void dispose() {
+    _recordingTimer?.cancel();
+    _obstacleDialogTimer?.cancel();
+    super.dispose();
+  }
 
-  /// Inicia una nueva sesión de operación en modo 'coupled'. (VERSIÓN CORREGIDA)
-  ///
-  /// Muestra un diálogo para que el usuario ingrese un nombre para el registro.
-  /// Utiliza un patrón robusto que espera un resultado del diálogo para evitar
-  /// problemas de estado, garantizando que la sesión solo se cree si el usuario
-  /// confirma con un nombre válido.
+  void _showObstacleDialog() {
+    _obstacleDialogTimer?.cancel();
+    _obstacleDialogTimer = Timer(const Duration(seconds: 30), () {
+      if (Get.isDialogOpen ?? false) {
+        Get.back();
+        Get.snackbar(
+          "Tiempo Expirado",
+          "Regresando al inicio por defecto.",
+          backgroundColor: AppColors.warning,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 4),
+        );
+      }
+    });
+
+    Get.dialog(
+      AlertDialog(
+        title: const Text('¡Obstáculo Detectado!'),
+        content: const Text(
+            'El UGV ha encontrado un obstáculo en la ruta. ¿Qué desea hacer?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              _obstacleDialogTimer?.cancel();
+              Get.back();
+              bleController.sendReturnToOrigin();
+            },
+            child: Text('Regresar al Origen',
+                style: TextStyle(color: AppColors.warning)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              _obstacleDialogTimer?.cancel();
+              Get.back();
+              bleController.sendStopAndStay();
+            },
+            child: const Text('Detener Recorrido'),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+  }
+
+  void _startPeriodicRecording() {
+    _recordingTimer?.cancel();
+    _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_currentActiveSession.value != null &&
+          bleController.isUgvConnected.value &&
+          bleController.isPortableConnected.value) {
+        _saveSensorReadings();
+      }
+    });
+  }
+
+  void _stopPeriodicRecording() {
+    _recordingTimer?.cancel();
+  }
+
+  int _batchSequence = 0;
+  void _saveSensorReadings() {
+    if (_currentActiveSession.value == null) return;
+    _batchSequence++;
+    final String sessionId = _currentActiveSession.value!.id;
+
+    final hasFix = bleController.gpsHasFix.value;
+    final lat = bleController.latitude.value;
+    final lon = bleController.longitude.value;
+    final double? latitude = (hasFix && lat != 0.0) ? lat : null;
+    final double? longitude = (hasFix && lon != 0.0) ? lon : null;
+
+    final readings = {
+      'CO2': bleController.portableData['co2'],
+      'CH4': bleController.portableData['ch4'],
+      'Temperatura': bleController.portableData['temperature'],
+      'Humedad': bleController.portableData['humidity'],
+    };
+    final units = {
+      'CO2': 'ppm',
+      'CH4': 'ppm',
+      'Temperatura': 'ºC',
+      'Humedad': '%'
+    };
+
+    readings.forEach((sensorType, valueStr) {
+      if (valueStr != null) {
+        final value = double.tryParse(valueStr);
+        if (value != null) {
+          _operationDataService.createSensorReading(
+            sessionId: sessionId,
+            sensorType: sensorType,
+            value: value,
+            unit: units[sensorType],
+            batchSequence: _batchSequence,
+            latitude: latitude,
+            longitude: longitude,
+            source: 'realtime',
+          );
+        }
+      }
+    });
+  }
+
   Future<void> _startSensorRecording() async {
-    // 1. Verificación de Precondiciones (ambos dispositivos conectados)
     if (!bleController.isPortableConnected.value ||
         !bleController.isUgvConnected.value) {
       Get.snackbar('Dispositivos no conectados',
           'Ambos dispositivos (DP y UGV) deben estar conectados.');
       return;
     }
+    String? operationName;
+    String? description;
 
-    // Se utilizará una variable local al diálogo para mayor seguridad de estado.
-    String localOperationName = '';
-
-    // 2. Esperamos a que el diálogo devuelva un resultado booleano.
-    final bool? shouldCreate = await Get.dialog<bool>(
+    final confirmed = await Get.dialog<bool>(
       AlertDialog(
-        title: const Text('Crear Nuevo Registro de Acople'),
-        content: TextField(
-          autofocus: true, // Mejora la experiencia de usuario
-          decoration: const InputDecoration(
-              labelText: 'Nombre del Registro (Obligatorio)'),
-          // El onChanged actualiza la variable local del diálogo.
-          onChanged: (value) => localOperationName = value,
+        backgroundColor: AppColors.backgroundWhite,
+        title: Text('Crear Nuevo Registro',
+            style: TextStyle(color: AppColors.textPrimary)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              decoration: const InputDecoration(
+                  labelText: 'Nombre del Registro (Obligatorio)'),
+              onChanged: (value) => operationName = value,
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              decoration:
+                  const InputDecoration(labelText: 'Descripción (Opcional)'),
+              onChanged: (value) => description = value,
+            ),
+          ],
         ),
         actions: [
           TextButton(
-            // Al cancelar, devolvemos 'false'.
             onPressed: () => Get.back(result: false),
-            child: const Text('Cancelar'),
+            child: Text('Cancelar', style: TextStyle(color: AppColors.error)),
           ),
           ElevatedButton(
             onPressed: () {
-              if (localOperationName.trim().isNotEmpty) {
-                // Al confirmar, devolvemos 'true'.
+              if (operationName != null && operationName!.trim().isNotEmpty) {
                 Get.back(result: true);
               } else {
-                Get.snackbar('Error', 'El nombre del registro es obligatorio.');
+                Get.snackbar('Error', 'El nombre del registro es obligatorio');
               }
             },
             child: const Text('Crear y Grabar'),
@@ -153,44 +247,33 @@ class _ModoAcopleState extends State<ModoAcople> {
       ),
     );
 
-    // 3. Verificamos el resultado del diálogo.
-    // Si shouldCreate no es 'true', significa que el usuario canceló o cerró el diálogo.
-    if (shouldCreate != true) {
-      _logger.i("Creación de registro cancelada por el usuario.");
-      return;
-    }
+    if (confirmed != true) return;
 
-    // 4. Creación de la Sesión
-    // Si llegamos aquí, es seguro que tenemos un nombre válido.
     final session = await _operationDataService.createOperationSession(
-      operationName: localOperationName.trim(), // Usamos el valor capturado
-      description: 'Sesión de operación en modo acoplado (DP + UGV).',
+      operationName: operationName,
+      description: description,
       mode: 'coupled',
     );
 
     if (session != null) {
       _currentActiveSession.value = session;
-      Get.snackbar('Monitoreo Iniciado',
-          'Sesión "${session.operationName}" iniciada con éxito.');
+      _batchSequence = 0;
+      Get.snackbar(
+          'Monitoreo Iniciado', 'Sesión "${session.operationName}" iniciada.');
     }
   }
 
-  /// Finaliza la sesión de operación acoplada actualmente activa.
   Future<void> _stopSensorRecording() async {
     if (_currentActiveSession.value == null) return;
     final success = await _operationDataService
         .endOperationSession(_currentActiveSession.value!.id);
     if (success) {
+      Get.snackbar('Monitoreo Detenido',
+          'Sesión "${_currentActiveSession.value!.operationName}" finalizada.');
       _currentActiveSession.value = null;
-      Get.snackbar('Monitoreo Detenido', 'Sesión finalizada con éxito.');
     }
   }
 
-  //============================================================================
-  // SECCIÓN: LÓGICA DE EJECUCIÓN AUTOMÁTICA
-  //============================================================================
-
-  /// Abre la pantalla de selección de rutas para que el usuario elija una para ejecutar.
   Future<void> _showUgvRoutesScreen() async {
     if (_isAutoModeActive.value) {
       Get.snackbar('Acción no permitida',
@@ -202,22 +285,18 @@ class _ModoAcopleState extends State<ModoAcople> {
     if (result != null) {
       _selectedRoute.value = result;
       Get.snackbar('Ruta Seleccionada',
-          '"${result.operationName}" (${result.indicator}) lista para ejecución.');
+          '"${result.operationName}" lista para ejecución.');
     }
   }
 
-  /// Gestiona el botón principal de ejecución/cancelación de ruta automática.
   void _handleAutoButton() {
     if (bleController.ugvDeviceId == null) return;
-
     if (_isAutoModeActive.value) {
-      // Si la ruta está activa, envía el comando de cancelación ('N').
       bleController.sendData(
           bleController.ugvDeviceId!, BleController.cancelAuto);
       _isAwaitingEndOfRoute.value = true;
       Get.snackbar('Cancelando Ruta', 'El UGV regresará al punto de inicio.');
     } else if (_selectedRoute.value != null) {
-      // Si hay una ruta seleccionada, envía su indicador para iniciarla.
       bleController.sendData(
           bleController.ugvDeviceId!, _selectedRoute.value!.indicator!);
       _isAutoModeActive.value = true;
@@ -227,24 +306,17 @@ class _ModoAcopleState extends State<ModoAcople> {
     }
   }
 
-  //============================================================================
-  // SECCIÓN: LÓGICA DE CONTROL MANUAL Y EMERGENCIA
-  //============================================================================
-
-  /// Envía el comando de interrupción/emergencia ('P') para detener todo movimiento.
   void _interruptMovement() {
     if (bleController.ugvDeviceId != null) {
       bleController.sendData(
           bleController.ugvDeviceId!, BleController.interruption);
-      // Resetea todos los estados de modo automático.
       if (_isAutoModeActive.value) _isAutoModeActive.value = false;
       if (_isAwaitingEndOfRoute.value) _isAwaitingEndOfRoute.value = false;
-      if (_selectedRoute.value != null) _selectedRoute.value = null;
+      _selectedRoute.value = null;
       Get.snackbar('Interrupción de Emergencia', 'Movimiento detenido.');
     }
   }
 
-  /// Inicia el movimiento en una dirección (usado por los botones direccionales).
   void _startMovement(String command) {
     if (bleController.ugvDeviceId != null && !_isAutoModeActive.value) {
       if (_lastSentDirectionalCommand != command) {
@@ -254,7 +326,6 @@ class _ModoAcopleState extends State<ModoAcople> {
     }
   }
 
-  /// Envía el comando de detención ('S') al levantar un botón direccional.
   void _stopMovement() {
     if (bleController.ugvDeviceId != null && !_isAutoModeActive.value) {
       bleController.sendData(bleController.ugvDeviceId!, BleController.stop);
@@ -262,9 +333,6 @@ class _ModoAcopleState extends State<ModoAcople> {
     }
   }
 
-  //============================================================================
-  // SECCIÓN: CONSTRUCCIÓN DE LA INTERFAZ DE USUARIO (UI)
-  //============================================================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -279,12 +347,8 @@ class _ModoAcopleState extends State<ModoAcople> {
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Obx(() {
-          // La variable principal que controla si la UI está activa.
           final bool isCoupledAndReady =
               bleController.isPhysicallyCoupled.value;
-
-          // Opacity y AbsorbPointer envuelven toda la UI.
-          // Si no está acoplado, la UI se ve semitransparente y no es interactiva.
           return Opacity(
             opacity: isCoupledAndReady ? 1.0 : 0.5,
             child: AbsorbPointer(
@@ -296,7 +360,9 @@ class _ModoAcopleState extends State<ModoAcople> {
                   const SizedBox(height: 20),
                   _buildCouplingStatusIndicator(isCoupledAndReady),
                   const SizedBox(height: 20),
-                  _buildSensorRecordingPanel(),
+                  // --- INICIO DE CAMBIO: Estandarización de UI ---
+                  _buildRecordingControlPanel(), // Reemplazado por el panel estandarizado
+                  // --- FIN DE CAMBIO ---
                   const SizedBox(height: 20),
                   _buildAutoExecutionPanel(),
                   const SizedBox(height: 20),
@@ -312,32 +378,68 @@ class _ModoAcopleState extends State<ModoAcople> {
     );
   }
 
-  /// Construye el panel superior con los indicadores de estado de ambos dispositivos.
   Widget _buildStatusIndicatorsPanel(ThemeData theme) {
     return Column(
       children: [
-        // Fila para el Tanari DP
-        Row(children: [
-          Expanded(
-              child: Obx(() => _buildConnectionStatus(theme,
-                  bleController.isPortableConnected.value, "Tanari DP"))),
-          const SizedBox(width: 15),
-          Expanded(child: Obx(() => _buildBatteryStatus(theme, isDP: true))),
-        ]),
+        Row(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: Icon(Icons.phone_android, color: AppColors.textSecondary),
+            ),
+            Expanded(
+                child: Obx(() => _buildConnectionStatus(theme,
+                    bleController.isPortableConnected.value, "Tanari DP"))),
+            const SizedBox(width: 15),
+            Expanded(child: Obx(() => _buildBatteryStatus(theme, isDP: true))),
+          ],
+        ),
         const SizedBox(height: 10),
-        // Fila para el Tanari UGV
-        Row(children: [
-          Expanded(
-              child: Obx(() => _buildConnectionStatus(
-                  theme, bleController.isUgvConnected.value, "Tanari UGV"))),
-          const SizedBox(width: 15),
-          Expanded(child: Obx(() => _buildBatteryStatus(theme, isDP: false))),
-        ]),
+        Row(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child:
+                  Icon(FontAwesomeIcons.robot, color: AppColors.textSecondary),
+            ),
+            Expanded(
+                child: Obx(() => _buildConnectionStatus(
+                    theme, bleController.isUgvConnected.value, "Tanari UGV"))),
+            const SizedBox(width: 15),
+            Expanded(child: Obx(() => _buildBatteryStatus(theme, isDP: false))),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Obx(() =>
+            _buildGpsStatusIndicator(theme, bleController.gpsHasFix.value)),
       ],
     );
   }
 
-  /// Construye el indicador visual del estado de acople físico del sistema.
+  Widget _buildGpsStatusIndicator(ThemeData theme, bool hasFix) {
+    final color = hasFix ? AppColors.accentColor : AppColors.error;
+    final text = hasFix ? 'GPS Conectado' : 'GPS Sin Señal';
+    final icon = hasFix ? Icons.gps_fixed : Icons.gps_not_fixed;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withAlpha(50),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color, width: 1.5),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 10),
+          Text(text,
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(color: color, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCouplingStatusIndicator(bool isCoupled) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -356,20 +458,17 @@ class _ModoAcopleState extends State<ModoAcople> {
           Icon(isCoupled ? Icons.link : Icons.link_off,
               color: isCoupled ? AppColors.accentColor : AppColors.error),
           const SizedBox(width: 10),
-          Text(
-            isCoupled ? 'Sistema Acoplado' : 'Sistema Desacoplado',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          Text(isCoupled ? 'Sistema Acoplado' : 'Sistema Desacoplado',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: isCoupled ? AppColors.accentColor : AppColors.error,
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
+                  fontWeight: FontWeight.bold)),
         ],
       ),
     );
   }
 
-  /// Construye el panel para iniciar y detener la grabación de datos de sensores.
-  Widget _buildSensorRecordingPanel() {
+  // --- INICIO DE CAMBIO: Panel de grabación estandarizado ---
+  Widget _buildRecordingControlPanel() {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -385,18 +484,16 @@ class _ModoAcopleState extends State<ModoAcople> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Panel de Grabación de Sensores',
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.bold),
-          ),
+          Text('Panel de Grabación',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(fontWeight: FontWeight.bold)),
           const Divider(height: 20),
           Obx(() => Text(
                 _currentActiveSession.value != null
-                    ? 'Grabando sesión: "${_currentActiveSession.value!.operationName}"'
-                    : 'No hay grabación activa.',
+                    ? 'Grabando: "${_currentActiveSession.value!.operationName}"'
+                    : 'Grabación detenida.',
                 style: TextStyle(
                     fontStyle: FontStyle.italic,
                     color: _currentActiveSession.value != null
@@ -408,28 +505,20 @@ class _ModoAcopleState extends State<ModoAcople> {
             children: [
               Expanded(
                 child: Obx(() => ElevatedButton.icon(
-                      // El botón se deshabilita si ya hay una sesión activa.
                       onPressed: _currentActiveSession.value == null
                           ? _startSensorRecording
                           : null,
-                      icon: const Icon(Icons.add_circle_outline),
-                      label: const Text(
-                        'Crear Registro',
-                        style: TextStyle(color: AppColors.backgroundWhite),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                          iconColor: AppColors.backgroundWhite,
-                          backgroundColor: AppColors.accent),
+                      icon: const Icon(Icons.play_arrow),
+                      label: const Text('Iniciar'),
                     )),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Obx(() => ElevatedButton.icon(
-                      // El botón se habilita solo si hay una sesión activa.
                       onPressed: _currentActiveSession.value != null
                           ? _stopSensorRecording
                           : null,
-                      icon: const Icon(Icons.stop_circle),
+                      icon: const Icon(Icons.stop),
                       label: const Text('Detener'),
                       style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.error),
@@ -441,21 +530,20 @@ class _ModoAcopleState extends State<ModoAcople> {
       ),
     );
   }
+  // --- FIN DE CAMBIO ---
 
-  /// Construye el panel que muestra los datos de los sensores del DP en tiempo real.
   Widget _buildMonitoringPanel() {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.backgroundLight,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withAlpha(25),
-              blurRadius: 8,
-              offset: const Offset(0, 4))
-        ],
-      ),
+          color: AppColors.backgroundLight,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withAlpha(25),
+                blurRadius: 8,
+                offset: const Offset(0, 4))
+          ]),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -465,7 +553,6 @@ class _ModoAcopleState extends State<ModoAcople> {
                   .titleLarge
                   ?.copyWith(fontWeight: FontWeight.bold)),
           const Divider(height: 20),
-          // Las filas de datos se actualizan automáticamente gracias a Obx.
           Obx(() => _buildDataRow(
               'CO2:', '${bleController.portableData['co2'] ?? '--'} ppm')),
           Obx(() => _buildDataRow(
@@ -479,20 +566,18 @@ class _ModoAcopleState extends State<ModoAcople> {
     );
   }
 
-  /// Construye el panel para la selección y ejecución de rutas automáticas.
   Widget _buildAutoExecutionPanel() {
     return Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.backgroundLight,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withAlpha(25),
-                blurRadius: 8,
-                offset: const Offset(0, 4))
-          ],
-        ),
+            color: AppColors.backgroundLight,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withAlpha(25),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4))
+            ]),
         child: Column(
           children: [
             Text('Ejecución Automática',
@@ -500,19 +585,21 @@ class _ModoAcopleState extends State<ModoAcople> {
                     .textTheme
                     .titleLarge
                     ?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Obx(() => _isAutoModeActive.value
+                ? _buildAutoStatusPanel()
+                : Container()),
             const SizedBox(height: 16),
             SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.list_alt),
-                label: const Text('Seleccionar Ruta'),
-                onPressed: _showUgvRoutesScreen,
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.secondary1,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 15)),
-              ),
-            ),
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                    icon: const Icon(Icons.list_alt),
+                    label: const Text('Seleccionar Ruta'),
+                    onPressed: _showUgvRoutesScreen,
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.secondary1,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 15)))),
             const SizedBox(height: 16),
             Obx(() {
               final isReadyToExecute = _selectedRoute.value != null;
@@ -522,44 +609,78 @@ class _ModoAcopleState extends State<ModoAcople> {
                       ? 'Ejecutar Ruta (${_selectedRoute.value?.indicator})'
                       : 'Seleccione una Ruta';
               return SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  icon: Icon(_isAutoModeActive.value
-                      ? Icons.cancel
-                      : FontAwesomeIcons.robot),
-                  label: Text(buttonText),
-                  // El botón se habilita si hay una ruta lista o si una está en ejecución.
-                  onPressed: (isReadyToExecute || _isAutoModeActive.value)
-                      ? _handleAutoButton
-                      : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _isAutoModeActive.value
-                        ? AppColors.error
-                        : AppColors.accent,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                  ),
-                ),
-              );
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                      icon: Icon(_isAutoModeActive.value
+                          ? Icons.cancel
+                          : FontAwesomeIcons.robot),
+                      label: Text(buttonText),
+                      onPressed: (isReadyToExecute || _isAutoModeActive.value)
+                          ? _handleAutoButton
+                          : null,
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: _isAutoModeActive.value
+                              ? AppColors.error
+                              : AppColors.accent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 15))));
             }),
           ],
         ));
   }
 
-  /// Construye el panel para el control manual del UGV.
+  Widget _buildAutoStatusPanel() {
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.info.withAlpha(26),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.info, width: 1),
+      ),
+      child: Obx(() {
+        final route = bleController.activeRouteNumber.value;
+        final point = bleController.activePointNumber.value;
+        final arrived =
+            bleController.arrivedAtPoint.value == point && point > 0;
+        final statusText = arrived
+            ? "En el Punto $point"
+            : (point > 0 ? "Hacia el Punto $point" : "Iniciando...");
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              arrived ? Icons.location_on : Icons.route,
+              color: AppColors.info,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              "Ruta $route - $statusText",
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppColors.info,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        );
+      }),
+    );
+  }
+
   Widget _buildUgvControlPanel() {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.backgroundLight,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withAlpha(25),
-              blurRadius: 8,
-              offset: const Offset(0, 4))
-        ],
-      ),
+          color: AppColors.backgroundLight,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withAlpha(25),
+                blurRadius: 8,
+                offset: const Offset(0, 4))
+          ]),
       child: Column(
         children: [
           Text('Control Manual Tanari UGV',
@@ -569,23 +690,19 @@ class _ModoAcopleState extends State<ModoAcople> {
                   ?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
           SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              icon: const Icon(FontAwesomeIcons.hand),
-              label: const Text("STOP DE EMERGENCIA"),
-              onPressed: _interruptMovement,
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.error,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 15)),
-            ),
-          ),
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                  icon: const Icon(FontAwesomeIcons.hand),
+                  label: const Text("STOP DE EMERGENCIA"),
+                  onPressed: _interruptMovement,
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.error,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 15)))),
           const SizedBox(height: 20),
           Obx(() {
-            // Los controles direccionales se deshabilitan en modo automático.
             final controlsEnabled =
                 !_isAutoModeActive.value && !_isAwaitingEndOfRoute.value;
-
             return Opacity(
               opacity: controlsEnabled ? 1.0 : 0.4,
               child: Column(
@@ -601,7 +718,7 @@ class _ModoAcopleState extends State<ModoAcople> {
                         _buildDirectionButton(Icons.arrow_back,
                             BleController.moveLeft, controlsEnabled),
                         _buildDirectionButton(Icons.arrow_forward,
-                            BleController.moveRight, controlsEnabled),
+                            BleController.moveRight, controlsEnabled)
                       ]),
                   const SizedBox(height: 10),
                   Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -617,75 +734,52 @@ class _ModoAcopleState extends State<ModoAcople> {
     );
   }
 
-  //============================================================================
-  // SECCIÓN: WIDGETS AUXILIARES REUTILIZABLES DE UI
-  //============================================================================
-
-  /// Construye una fila estandarizada para mostrar un dato de sensor.
   Widget _buildDataRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        child:
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Text(label, style: const TextStyle(fontSize: 16)),
           Text(value,
-              style:
-                  const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold))
+        ]));
   }
 
-  /// Construye un widget para mostrar el estado de conexión BLE.
   Widget _buildConnectionStatus(
       ThemeData theme, bool isConnected, String deviceName) {
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: isConnected
-            ? AppColors.accentColor.withAlpha(50)
-            : AppColors.error.withAlpha(50),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-            color: isConnected ? AppColors.accentColor : AppColors.error,
-            width: 1.5),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+            color: isConnected
+                ? AppColors.accentColor.withAlpha(50)
+                : AppColors.error.withAlpha(50),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+                color: isConnected ? AppColors.accentColor : AppColors.error,
+                width: 1.5)),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           Icon(
               isConnected
                   ? Icons.bluetooth_connected
                   : Icons.bluetooth_disabled,
               color: isConnected ? AppColors.accentColor : AppColors.error),
           const SizedBox(width: 10),
-          Text(
-            isConnected ? 'Conectado' : 'Desconectado',
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: isConnected ? AppColors.accentColor : AppColors.error,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
+          Text(isConnected ? 'Conectado' : 'Desconectado',
+              style: theme.textTheme.titleMedium?.copyWith(
+                  color: isConnected ? AppColors.accentColor : AppColors.error,
+                  fontWeight: FontWeight.bold))
+        ]));
   }
 
-  /// Construye un widget para mostrar el estado de la batería (para DP o UGV).
   Widget _buildBatteryStatus(ThemeData theme, {required bool isDP}) {
-    // Determina qué valor de batería y estado de conexión usar.
     final int batteryLevel = isDP
         ? bleController.portableBatteryLevel.value
         : bleController.batteryLevel.value;
     final bool isConnected = isDP
         ? bleController.isPortableConnected.value
         : bleController.isUgvConnected.value;
-
     IconData batteryIcon;
     Color iconColor;
-
-    // Lógica para seleccionar el ícono y color según el nivel de batería.
     if (!isConnected) {
       batteryIcon = Icons.battery_unknown;
       iconColor = AppColors.neutral;
@@ -695,62 +789,45 @@ class _ModoAcopleState extends State<ModoAcople> {
     } else if (batteryLevel > 40) {
       batteryIcon = Icons.battery_std;
       iconColor = AppColors.warning;
-    } else if (batteryLevel > 15) {
+    } else {
       batteryIcon = Icons.battery_alert;
       iconColor = AppColors.error;
-    } else {
-      batteryIcon = Icons.battery_alert_sharp;
-      iconColor = AppColors.error;
     }
-
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: iconColor.withAlpha(50),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: iconColor, width: 1.5),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+            color: iconColor.withAlpha(50),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: iconColor, width: 1.5)),
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           Icon(batteryIcon, color: iconColor, size: 20),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              isConnected ? '$batteryLevel%' : '--%',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(color: iconColor, fontWeight: FontWeight.bold),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
+              child: Text(isConnected ? '$batteryLevel%' : '--%',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(color: iconColor, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis))
+        ]));
   }
 
-  /// Construye un botón circular para el control de dirección manual.
   Widget _buildDirectionButton(IconData icon, String command, bool isEnabled) {
     return GestureDetector(
-      // Detecta cuándo se presiona y se suelta el botón.
-      onTapDown: isEnabled ? (_) => _startMovement(command) : null,
-      onTapUp: isEnabled ? (_) => _stopMovement() : null,
-      onTapCancel: isEnabled ? () => _stopMovement() : null,
-      child: Container(
-        width: 70,
-        height: 70,
-        decoration: BoxDecoration(
-          color: isEnabled ? AppColors.accent : AppColors.neutral,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withAlpha(51),
-                spreadRadius: 2,
-                blurRadius: 5,
-                offset: const Offset(0, 3))
-          ],
-        ),
-        child: Icon(icon, color: Colors.white, size: 40),
-      ),
-    );
+        onTapDown: isEnabled ? (_) => _startMovement(command) : null,
+        onTapUp: isEnabled ? (_) => _stopMovement() : null,
+        onTapCancel: isEnabled ? () => _stopMovement() : null,
+        child: Container(
+            width: 70,
+            height: 70,
+            decoration: BoxDecoration(
+                color: isEnabled ? AppColors.accent : AppColors.neutral,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withAlpha(51),
+                      spreadRadius: 2,
+                      blurRadius: 5,
+                      offset: const Offset(0, 3))
+                ]),
+            child: Icon(icon, color: Colors.white, size: 40)));
   }
 }

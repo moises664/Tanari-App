@@ -18,7 +18,7 @@ dependencies:
   get: ^4.7.2 # Manejo de estado y dependencias
   device_info_plus: ^11.4.0 # Informacion del dispositivo
   logger: ^2.5.0 # Para registro de logs
-  icons_plus: ^5.0.0
+  icons_plus: ^5.0.0 # Iconos adicionales
   sqflite: ^2.4.2 # Base de datos local para almacenamiento de datos
   path: ^1.8.3 # Manejo de rutas de archivos
   logging: ^1.3.0 # Registro de eventos y errores
@@ -29,11 +29,18 @@ dependencies:
   intl: ^0.20.2 # Internacionalizacion y formateo de fechas
   fl_chart: ^0.65.0  # Gráficos y visualización de datos
   app_links: ^6.4.0 # Manejo de enlaces universales
-  url_launcher: ^6.3.2
+  url_launcher: ^6.3.2 # Abrir enlaces en el navegador o aplicaciones externas
   flutter_map: ^8.2.1 # Mapas interactivos
   latlong2: ^0.9.1 # Manejo de coordenadas geograficas 
   mapbox_maps_flutter: ^2.10.0 # Mapas de Mapbox con funcionalidades avanzadas y personalizacion 
   geolocator: ^14.0.2 # Geolocalizacion y servicios de ubicacion
+  map_launcher: ^4.4.2 # Navegacion entre aplicaciones de mapas
+  flutter_svg: ^2.0.7 # Soporte para imagenes SVG
+  clipboard: ^0.1.3 # Manejo del portapapeles del dispositivo \
+  pdf: ^3.10.8 # Generacion de documentos PDF
+  printing: ^5.12.0 # Impresion de documentos
+  path_provider: ^2.1.3 # Acceso a rutas del sistema de archivos
+  open_file: ^3.2.1 # Abrir archivos con aplicaciones externas
 
 
 dev_dependencies:

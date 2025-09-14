@@ -1,177 +1,153 @@
-//VERSION 6 + APP (Solución Definitiva)
-import 'dart:async'; // Para usar Timer y StreamSubscription
-import 'dart:io'; // Para Platform.isAndroid
-import 'package:device_info_plus/device_info_plus.dart'; // Para obtener información del dispositivo
-import 'package:flutter_blue_plus/flutter_blue_plus.dart'; // Librería principal de Bluetooth
-import 'package:get/get.dart'; // Para el manejo de estados y la inyección de dependencias
-import 'package:permission_handler/permission_handler.dart'; // Para la gestión de permisos
-import 'package:logger/logger.dart'; // Para un logging más robusto
-import 'package:flutter/foundation.dart'; // Para kDebugMode
-import 'package:flutter/material.dart'; // Para SnackBar y otros widgets
+import 'dart:async';
+import 'dart:io';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:get/get.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:logger/logger.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:tanari_app/src/controllers/bluetooth/found_device.dart';
+import 'package:tanari_app/src/services/api/admin_services.dart';
+import 'package:tanari_app/src/services/api/permissions_service.dart';
 
-// Importa tu servicio de permisos
-import 'package:tanari_app/src/services/api/permissions_service.dart'; // Asegúrate que la ruta sea correcta
-
-/// Controlador principal para la gestión de Bluetooth Low Energy (BLE).
+/// Controlador principal para la gestión de Bluetooth Low Energy (BLE)
+///
 /// Centraliza la lógica de escaneo, conexión, desconexión, envío/recepción de datos
 /// y manejo de estados para los dispositivos Tanari UGV y Tanari DP.
+///
+/// ## Funcionalidades principales:
+/// - Escaneo y descubrimiento de dispositivos BLE
+/// - Conexión y desconexión de dispositivos Tanari
+/// - Envío de comandos al UGV
+/// - Recepción y procesamiento de datos de sensores
+/// - Gestión de estados de conexión y dispositivos
+/// - Manejo de permisos Bluetooth
 class BleController extends GetxController {
-  //----------------------------------------------------------------------------
-  // UUIDs DE SERVICIOS Y CARACTERÍSTICAS
-  // Estos UUIDs deben coincidir con los configurados en tus dispositivos ESP32.
-  //----------------------------------------------------------------------------
-  // UUID del servicio BLE para ambos dispositivos Tanari.
+  // ===========================================================================
+  // CONSTANTES Y CONFIGURACIÓN
+  // ===========================================================================
+
+  /// UUIDs de servicios y características BLE
   static const serviceUuid = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
-  // UUID de la característica para enviar comandos y recibir data (si aaplica) del UGV.
   static const characteristicUuidUGV = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
-  // UUID de la característica para notificaciones (recepción de datos) del Tanari DP.
   static const characteristicUuidPortableNotify =
       "beb5483e-36e1-4688-b7f5-ea07361b26a9";
 
-  // Nombres de los dispositivos BLE (¡estos deben coincidir exactamente con los nombres anunciados por los ESP32!)
+  /// Nombres de dispositivos
   static const String deviceNameUGV = "TANARI UGV";
   static const String deviceNameDP = "TANARI DP";
 
-  //----------------------------------------------------------------------------
-  // COMANDOS PARA EL UGV
-  // Estos comandos son strings que se envían al Tanari UGV para controlar su comportamiento.
-  //----------------------------------------------------------------------------
-  static const String moveForward = 'F'; // Mover hacia adelante
-  static const String moveBack = 'B'; // Mover hacia atrás
-  static const String moveRight = 'R'; // Mover a la derecha
-  static const String moveLeft = 'L'; // Mover a la izquierda
-  static const String stop = 'S'; // Detener
-  static const String interruption =
-      'P'; // Comando para interrupción manual del movimiento
-  static const String endAutoMode =
-      'T'; // Comando para finalizar el modo automático
-  static const String startRecording = 'G'; // Iniciar grabación
-  static const String stopRecording =
-      'N'; // Detener grabación (también es Cancelar Modo Auto)
-  static const String startAutoMode = 'A'; // Iniciar modo automático
-  static const String toggleLedOn = 'H'; // Comando para encender el LED
-  static const String toggleLedOff = 'L'; // Comando para apagar el LED
+  /// Comandos para control del UGV
+  static const String moveForward = 'F';
+  static const String moveBack = 'B';
+  static const String moveRight = 'R';
+  static const String moveLeft = 'L';
+  static const String stop = 'S';
+  static const String interruption = 'P';
+  static const String endAutoMode = 'T';
+  static const String startRecording = 'G';
+  static const String stopRecording = 'N';
+  static const String startAutoMode = 'A';
+  static const String toggleLedOn = 'H';
+  static const String toggleLedOff = 'L';
+  static const String recordPoint = 'W';
+  static const String endRecording = 'E';
+  static const String extractData = 'X';
+  static const String cancelAuto = 'N';
+  static const String deleteRoutePrefix = 'DEL:';
+  static const String returnToOrigin = 'Q';
+  static const String stopAndStay = 'P';
 
-  // Nuevos comandos según el plan de acción
-  static const String recordPoint = 'W'; // Grabar un punto en la ruta
-  static const String endRecording = 'E'; // Finalizar la grabación de la ruta
-  static const String extractData = 'X'; // Extraer datos del UGV
-  static const String cancelAuto =
-      'N'; // Cancelar modo automático (reutiliza 'N')
-  static const String deleteRoutePrefix =
-      'DEL:'; // Prefijo para borrar una ruta
+  /// Señales recibidas del UGV
+  static const String obstacleDetected = 'V';
+  static const String arrivedAtPointSignal = 'I';
 
-  //----------------------------------------------------------------------------
+  // ===========================================================================
   // ESTADOS REACTIVOS (OBSERVABLES)
-  // Utilizan `Rx` de GetX para ser automáticamente reactivos a los cambios.
-  //----------------------------------------------------------------------------
-  final foundDevices = <FoundDevice>[]
-      .obs; // Lista de dispositivos encontrados durante el escaneo.
-  final connectedDevices = <String, BluetoothDevice>{}
-      .obs; // Mapa de dispositivos actualmente conectados (ID -> Dispositivo).
-  final connectedCharacteristics = <String, BluetoothCharacteristic>{}
-      .obs; // Mapa de características conectadas (ID -> Característica).
-  final isScanning = false.obs; // Indica si el escaneo BLE está activo.
+  // ===========================================================================
 
-  // Estado del LED del UGV (puede ser global o por dispositivo, aquí se usa para el UGV principal).
-  final ledStateUGV = false
-      .obs; // true si el LED del UGV está encendido, false si está apagado.
+  // Estados de evasión de obstáculos y seguimiento de ruta
+  final evasionModeActive = false.obs;
+  final activeRouteNumber = 0.obs;
+  final activePointNumber = 0.obs;
+  final RxnInt arrivedAtPoint = RxnInt(null);
+  final obstacleAlert = false.obs;
 
-  final portableData = <String, String>{}
-      .obs; // Datos recibidos del Tanari DP (CO2, CH4, Temp, Hum).
-  final rssiValues = <String, int?>{}
-      .obs; // Último valor RSSI para cada dispositivo conectado (ID -> RSSI).
-  final isRecording = false.obs; // Indica si el UGV está grabando un recorrido.
-  final isAutomaticMode =
-      false.obs; // Indica si el UGV está en modo automático.
+  // Datos GPS
+  final latitude = 0.0.obs;
+  final longitude = 0.0.obs;
+  final gpsHasFix = false.obs;
 
-  // Estados de conexión específicos para UGV y DP para una gestión más fácil en la UI.
+  // Gestión de dispositivos
+  final foundDevices = <FoundDevice>[].obs;
+  final connectedDevices = <String, BluetoothDevice>{}.obs;
+  final connectedCharacteristics = <String, BluetoothCharacteristic>{}.obs;
+  final isScanning = false.obs;
+
+  // Estados del UGV
+  final ledStateUGV = false.obs;
+  final isRecording = false.obs;
+  final isAutomaticMode = false.obs;
+
+  // Estados de conexión
   final isUgvConnected = false.obs;
   final isPortableConnected = false.obs;
 
-  final RxnString receivedData = RxnString(
-      null); // RxString para los datos recibidos del UGV, puede ser nulo
+  // Datos del dispositivo portátil
+  final portableData = <String, String>{}.obs;
+  final rssiValues = <String, int?>{}.obs;
+  final RxnString receivedData = RxnString(null);
 
-  // Nuevos estados reactivos para el panel de configuración del UGV
-  final currentSpeed = 100.obs; // Velocidad actual (RPM)
-  final currentWaitTime = 1000.obs; // Tiempo de espera (ms)
-  final batteryLevel = 100.obs; // Nivel de batería (%)
-  final memoryStatus =
-      false.obs; // Estado de la memoria (false = libre, true = llena)
-  // ===========================================================================
-  // INICIO: NUEVO ESTADO PARA ACOPLE FÍSICO
-  // ===========================================================================
-  /// Indica si el acople físico entre el UGV y el DP está activo.
+  // Configuración del UGV
+  final currentSpeed = 100.obs;
+  final currentWaitTime = 1000.obs;
+  final batteryLevel = 100.obs;
+  final memoryStatus = false.obs;
+
+  // Estados de acople físico
   final isPhysicallyCoupled = false.obs;
-  // ===========================================================================
-  // FIN: NUEVO ESTADO PARA ACOPLE FÍSICO
-  // ===========================================================================
 
-  // ===========================================================================
-  // INICIO: NUEVOS ESTADOS PARA EXTRACCIÓN DE BASE DE DATOS
-  // ===========================================================================
-  /// Indica si el proceso de extracción de datos está activo.
+  // Estados para extracción de base de datos
   final isExtractingData = false.obs;
-
-  /// Almacena las líneas de datos recibidas de la base de datos del UGV.
   final ugvDatabaseData = <String>[].obs;
-
-  /// Almacena el estado final de la extracción: 'completed', 'empty', 'error', o null.
   final Rxn<String> extractionStatus = Rxn<String>(null);
-  // ===========================================================================
-  // FIN: NUEVOS ESTADOS PARA EXTRACCIÓN DE BASE DE DATOS
-  // ===========================================================================
 
-  // ===========================================================================
-  // INICIO: NUEVO ESTADO PARA EL INDICADOR DE RUTA RECIBIDO DEL UGV
-  // ===========================================================================
-  /// Almacena el indicador de la nueva ruta creada, recibido directamente del UGV.
-  /// Ejemplo: "A4". Es nulo hasta que se recibe un nuevo indicador.
+  // Indicador de ruta
   final RxnString newRouteIndicator = RxnString(null);
-  // ===========================================================================
-  // FIN: NUEVO ESTADO PARA EL INDICADOR DE RUTA
-  // ===========================================================================
 
-  /// **NUEVO: Nivel de batería para el dispositivo Tanari DP.**
-  /// Almacena el porcentaje de batería recibido del dispositivo portátil.
-  /// Se inicializa en 0 para indicar que no hya datos hasta la primera lectura.
+  // Nivel de batería del dispositivo portátil
   final portableBatteryLevel = 0.obs;
 
-  //----------------------------------------------------------------------------
+  // ===========================================================================
   // SUBSCRIPCIONES Y TIMERS
-  // Para gestionar los flujos de datos y operaciones asíncronas.
-  //----------------------------------------------------------------------------
-  StreamSubscription<List<ScanResult>>?
-      _scanSubscription; // Suscripción a los resultados del escaneo.
-  final _connectionSubscriptions = <String,
-      StreamSubscription<
-          BluetoothConnectionState>>{}; // Suscripciones por dispositivo al estado de conexión.
-  final _valueSubscriptions = <String,
-      StreamSubscription<
-          List<
-              int>>>{}; // Suscripciones por característica para la recepción de valores.
-  final _rssiTimers = <String,
-      Timer>{}; // Temporizadores por dispositivo para la lectura periódica de RSSI.
-  final Logger _logger = Logger(); // Instancia para logging detallado.
+  // ===========================================================================
 
-  //----------------------------------------------------------------------------
-  // VARIABLES PARA DISPOSITIVOS ESPECÍFICOS (UGV Y PORTÁTIL)
-  // Almacenan los IDs y características de los dispositivos clave una vez conectados.
-  //----------------------------------------------------------------------------
-  String? ugvDeviceId; // ID del Tanari UGV si está conectado.
-  BluetoothCharacteristic?
-      ugvCharacteristic; // Característica principal del Tanari UGV.
-  String? portableDeviceId; // ID del Tanari DP si está conectado.
-  BluetoothCharacteristic?
-      portableCharacteristic; // Característica de notificación del Tanari DP.
+  StreamSubscription<List<ScanResult>>? _scanSubscription;
+  final _connectionSubscriptions =
+      <String, StreamSubscription<BluetoothConnectionState>>{};
+  final _valueSubscriptions = <String, StreamSubscription<List<int>>>{};
+  final _rssiTimers = <String, Timer>{};
+  final Logger _logger = Logger();
 
-  //----------------------------------------------------------------------------
+  // ===========================================================================
+  // VARIABLES DE DISPOSITIVOS
+  // ===========================================================================
+
+  String? ugvDeviceId;
+  BluetoothCharacteristic? ugvCharacteristic;
+  String? portableDeviceId;
+  BluetoothCharacteristic? portableCharacteristic;
+
+  // Dependencias
+  final AdminService _adminService = Get.find<AdminService>();
+  final List<String> _allowedDeviceUuids = [];
+
+  // ===========================================================================
   // MÉTODOS PÚBLICOS
-  // Acciones que la UI puede invocar.
-  //----------------------------------------------------------------------------
+  // ===========================================================================
 
-  /// Verifica si un dispositivo específico está conectado.
+  /// Verifica si un dispositivo específico está conectado
   bool isDeviceConnected(String deviceId) =>
       connectedDevices.containsKey(deviceId) &&
       (connectedDevices[deviceId]?.isConnected ?? false);
@@ -179,12 +155,10 @@ class BleController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _checkPermissions(); // Verifica los permisos al iniciar el controlador.
-    // Escucha los cambios en el estado del adaptador Bluetooth del dispositivo.
+    _checkPermissions();
     FlutterBluePlus.adapterState.listen((state) {
       _logger.i("Estado del adaptador Bluetooth: $state");
       if (state != BluetoothAdapterState.on && Get.isSnackbarOpen) {
-        // Si el Bluetooth se apaga y hay un snackbar abierto, lo cierra.
         Get.back();
         Get.snackbar(
           "Bluetooth Desactivado",
@@ -198,13 +172,12 @@ class BleController extends GetxController {
     });
   }
 
-  /// Verifica y solicita los permisos necesarios para BLE, especialmente para Android 11 e inferiores.
+  /// Verifica y solicita los permisos necesarios para BLE
   Future<void> _checkPermissions() async {
     try {
       final deviceInfo = DeviceInfoPlugin();
       final androidInfo = await deviceInfo.androidInfo;
 
-      // Para Android 11 (SDK 30) y versiones anteriores, se necesita permiso de ubicación.
       if (Platform.isAndroid && androidInfo.version.sdkInt <= 30) {
         final status = await Permission.locationWhenInUse.request();
         if (!status.isGranted) {
@@ -213,7 +186,6 @@ class BleController extends GetxController {
         }
       }
 
-      // Utiliza un servicio de permisos personalizado para solicitar permisos BLE.
       await PermissionsService.requestBlePermissions();
     } catch (e) {
       _logger.e("Error al verificar/solicitar permisos: ${e.toString()}");
@@ -223,13 +195,17 @@ class BleController extends GetxController {
     }
   }
 
-  /// Inicia el escaneo de dispositivos BLE.
-  /// Primero verifica el estado del Bluetooth y, si es necesario, intenta activarlo.
+  // ===========================================================================
+  // LÓGICA DE ESCANEO
+  // ===========================================================================
+
+  /// Inicia el escaneo de dispositivos BLE
   Future<void> startScan() async {
     if (isScanning.value) {
       _logger.i("Escaneo ya en curso, retornando.");
       return;
     }
+
     try {
       var state = await FlutterBluePlus.adapterState.first;
       if (state != BluetoothAdapterState.on) {
@@ -241,30 +217,26 @@ class BleController extends GetxController {
           colorText: Colors.white,
           duration: const Duration(seconds: 2),
         );
-        FlutterBluePlus.turnOn(); // Intenta activar el Bluetooth.
+        FlutterBluePlus.turnOn();
 
-        // Espera a que el Bluetooth se active, con un timeout.
         state = await FlutterBluePlus.adapterState
             .firstWhere((s) => s == BluetoothAdapterState.on)
             .timeout(const Duration(seconds: 15), onTimeout: () {
           throw TimeoutException("El Bluetooth no se activó a tiempo.");
         });
+
         if (Get.isSnackbarOpen) {
-          Get.back(); // Cierra el snackbar de "Activando Bluetooth".
+          Get.back();
         }
       }
 
       isScanning.value = true;
-      // foundDevices.clear(); // Se mantiene comentado para persistir la lista.
       _logger.i("Iniciando escaneo BLE...");
 
-      // Escucha los resultados del escaneo.
       _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
         for (var r in results) {
-          // Solo procesar dispositivos Tanari
           if (r.device.platformName == deviceNameUGV ||
               r.device.platformName == deviceNameDP) {
-            // Determina si el dispositivo ya está conectado
             final bool currentlyConnected =
                 connectedDevices.containsKey(r.device.remoteId.str);
             final newFoundDevice =
@@ -274,22 +246,18 @@ class BleController extends GetxController {
                 (fd) => fd.device.remoteId == newFoundDevice.device.remoteId);
 
             if (existingIndex != -1) {
-              // Si ya existe, actualiza el objeto FoundDevice (ej. RSSI y estado de conexión)
               final existingFoundDevice = foundDevices[existingIndex];
               foundDevices[existingIndex] = existingFoundDevice.copyWith(
                 rssi: newFoundDevice.rssi,
-                // Mantén el estado de conexión que ya tenías si era true,
-                // o actualízalo si el nuevo FoundDevice indica conexión (ej. si acabas de conectarlo)
                 isConnected: existingFoundDevice.isConnected ||
                     newFoundDevice.isConnected,
               );
             } else {
-              // Si no existe, añádelo
               foundDevices.add(newFoundDevice);
             }
           }
         }
-        foundDevices.refresh(); // Asegura que la UI se actualice
+        foundDevices.refresh();
         _logger.d("Dispositivos encontrados: ${foundDevices.length}");
       }, onError: (e) {
         _logger.e("Error durante el escaneo: $e");
@@ -301,7 +269,6 @@ class BleController extends GetxController {
         isScanning.value = false;
       });
 
-      // Inicia el escaneo BLE, filtrando por el UUID del servicio para mayor eficiencia.
       await FlutterBluePlus.startScan(
         timeout: const Duration(seconds: 10),
         withServices: [Guid(serviceUuid)],
@@ -321,7 +288,7 @@ class BleController extends GetxController {
     }
   }
 
-  /// Detiene el escaneo de dispositivos BLE.
+  /// Detiene el escaneo de dispositivos BLE
   void stopScan() {
     FlutterBluePlus.stopScan();
     _scanSubscription?.cancel();
@@ -330,60 +297,59 @@ class BleController extends GetxController {
     _logger.i("Escaneo BLE detenido.");
   }
 
-  /// Intenta conectar a un dispositivo Bluetooth.
-  /// Si el dispositivo ya está conectado o en proceso de conexión, lo ignora.
-  /// Si estaba previamente conectado y se intentó reconectar, primero se desconecta.
+  /// Carga la lista de UUIDs de dispositivos permitidos
+  Future<void> _loadAllowedDevices() async {
+    _allowedDeviceUuids.clear();
+    final uuids = await _adminService.fetchDeviceUuids();
+    _allowedDeviceUuids.addAll(uuids);
+    _logger.i(
+        "Cargados ${_allowedDeviceUuids.length} UUIDs de dispositivos permitidos para el escaneo.");
+  }
+
+  // ===========================================================================
+  // GESTIÓN DE CONEXIONES
+  // ===========================================================================
+
+  /// Conecta a un dispositivo Bluetooth
   Future<void> connectToDevice(FoundDevice foundDevice) async {
     final deviceId = foundDevice.device.remoteId.str;
     final deviceName = foundDevice.device.platformName;
 
-    // Si ya está conectado, desconecta primero para asegurar una reconexión limpia.
     if (foundDevice.device.isConnected) {
       _logger.i(
           "Dispositivo $deviceName ya conectado. Desconectando para reconectar.");
       await foundDevice.device.disconnect();
-      _cleanupDeviceConnection(
-          deviceId); // Limpiar recursos antes de intentar reconectar
-      await Future.delayed(const Duration(milliseconds: 500)); // Pequeña pausa
+      _cleanupDeviceConnection(deviceId);
+      await Future.delayed(const Duration(milliseconds: 500));
     }
 
     try {
       _logger.i("Conectando a $deviceName ($deviceId)...");
-      await foundDevice.device.connect(
-          timeout:
-              const Duration(seconds: 15)); // Intenta conectar con un timeout.
-      connectedDevices[deviceId] =
-          foundDevice.device; // Añade el dispositivo al mapa de conectados.
-      _monitorConnectionState(
-          foundDevice.device); // Inicia el monitoreo del estado de conexión.
-      await _discoverServices(
-          foundDevice.device); // Descubre los servicios y características.
-      _startRssiUpdates(
-          foundDevice.device); // Inicia la lectura periódica de RSSI.
+      await foundDevice.device.connect(timeout: const Duration(seconds: 15));
+      connectedDevices[deviceId] = foundDevice.device;
+      _monitorConnectionState(foundDevice.device);
+      await _discoverServices(foundDevice.device);
+      _startRssiUpdates(foundDevice.device);
 
-      // Actualizar estados de conexión específicos para la UI.
       if (deviceName == deviceNameUGV) {
-        ugvDeviceId = deviceId; // Asigna el ID del UGV.
+        ugvDeviceId = deviceId;
         isUgvConnected.value = true;
       } else if (deviceName == deviceNameDP) {
-        portableDeviceId = deviceId; // Asigna el ID del DP.
+        portableDeviceId = deviceId;
         isPortableConnected.value = true;
       }
 
-      // Asegurarse de que el dispositivo conectado esté en foundDevices y con su estado correcto
       final index = foundDevices
           .indexWhere((d) => d.device.remoteId == foundDevice.device.remoteId);
       if (index != -1) {
-        // Si ya existe, actualiza el RSSI y el estado de conexión en foundDevices
         foundDevices[index] = foundDevices[index].copyWith(
             rssi: await foundDevice.device.readRssi(), isConnected: true);
       } else {
-        // Si no existe, añádelo
         foundDevices.add(FoundDevice(
             foundDevice.device, await foundDevice.device.readRssi(),
             isConnected: true));
       }
-      foundDevices.refresh(); // Forzar actualización de UI
+      foundDevices.refresh();
 
       Get.snackbar(
         "Conexión Exitosa",
@@ -399,20 +365,18 @@ class BleController extends GetxController {
       if (Get.isSnackbarOpen) Get.back();
       Get.snackbar("Error de Conexión",
           "No se pudo conectar a $deviceName: ${e.toString()}");
-      _cleanupDeviceConnection(
-          deviceId); // Limpia los recursos si la conexión falla.
+      _cleanupDeviceConnection(deviceId);
     }
   }
 
-  /// Desconecta un dispositivo Bluetooth específico por su ID.
+  /// Desconecta un dispositivo Bluetooth
   Future<void> disconnectDevice(String deviceId) async {
     if (connectedDevices.containsKey(deviceId)) {
       final device = connectedDevices[deviceId]!;
       final deviceName = device.platformName;
       try {
         _logger.i("Desconectando de $deviceName ($deviceId)...");
-        await device.disconnect(); // Desconecta el dispositivo.
-        // La limpieza de recursos se maneja en _monitorConnectionState al detectar el estado "disconnected".
+        await device.disconnect();
         if (Get.isSnackbarOpen) Get.back();
         Get.snackbar(
           "Desconectado",
@@ -428,8 +392,7 @@ class BleController extends GetxController {
         if (Get.isSnackbarOpen) Get.back();
         Get.snackbar("Error al Desconectar",
             "No se pudo desconectar el dispositivo: ${e.toString()}");
-        _cleanupDeviceConnection(
-            deviceId); // Limpiar recursos incluso si hay un error en la desconexión.
+        _cleanupDeviceConnection(deviceId);
       }
     } else {
       _logger
@@ -437,7 +400,11 @@ class BleController extends GetxController {
     }
   }
 
-  /// Envía datos (como una cadena de texto) a una característica BLE específica del dispositivo.
+  // ===========================================================================
+  // ENVÍO DE COMANDOS
+  // ===========================================================================
+
+  /// Envía datos a una característica BLE
   Future<void> sendData(String deviceId, String data) async {
     if (!isDeviceConnected(deviceId)) {
       _logger.e("Error al enviar datos: Dispositivo $deviceId no conectado.");
@@ -455,17 +422,14 @@ class BleController extends GetxController {
     }
 
     try {
-      List<int> bytes =
-          data.codeUnits; // Convierte la cadena a una lista de bytes.
-      await characteristic.write(bytes,
-          withoutResponse: false); // Envía los datos.
+      List<int> bytes = data.codeUnits;
+      await characteristic.write(bytes, withoutResponse: false);
 
       if (kDebugMode) {
         print('Dato enviado a $deviceId: $data');
       }
       _logger.i('Dato enviado a $deviceId: $data');
 
-      // Solo actualiza el estado del LED y modo si el comando es para el UGV.
       if (deviceId == ugvDeviceId) {
         if (data == toggleLedOn || data == toggleLedOff) {
           ledStateUGV.value = data == toggleLedOn;
@@ -479,25 +443,32 @@ class BleController extends GetxController {
     }
   }
 
-  /// Alterna el estado del LED del UGV.
-  void toggleLedUGV(String deviceId) {
-    if (ugvCharacteristic != null && deviceId == ugvDeviceId) {
-      sendData(deviceId, ledStateUGV.value ? toggleLedOff : toggleLedOn);
-    } else {
-      Get.snackbar(
-          "Advertencia", "UGV no conectado o característica no disponible.");
+  /// Envía comando para activar/desactivar modo de evasión
+  void sendEvadeMode(bool enabled) {
+    if (ugvDeviceId != null) {
+      sendData(ugvDeviceId!, 'SET_EVADE:${enabled ? 1 : 0}');
     }
   }
 
-  /// Alterna el estado de grabación del recorrido del UGV.
+  /// Envía comando para regresar al origen
+  void sendReturnToOrigin() {
+    if (ugvDeviceId != null) {
+      sendData(ugvDeviceId!, returnToOrigin);
+    }
+  }
+
+  /// Envía comando para detenerse y permanecer en posición
+  void sendStopAndStay() {
+    if (ugvDeviceId != null) {
+      sendData(ugvDeviceId!, stopAndStay);
+    }
+  }
+
+  /// Alterna el estado de grabación del recorrido
   void toggleRecording(String deviceId) {
     if (ugvCharacteristic != null && deviceId == ugvDeviceId) {
-      isRecording.value = !isRecording.value; // Cambia el estado de grabación.
-      sendData(
-          deviceId,
-          isRecording.value
-              ? startRecording
-              : stopRecording); // Envía el comando correspondiente.
+      isRecording.value = !isRecording.value;
+      sendData(deviceId, isRecording.value ? startRecording : stopRecording);
       _logger.i("Estado de grabación cambiado a: ${isRecording.value}");
     } else {
       Get.snackbar(
@@ -505,28 +476,25 @@ class BleController extends GetxController {
     }
   }
 
-  /// Inicia el modo automático del UGV.
+  /// Inicia el modo automático
   void startAutomaticMode(String deviceId) {
     if (ugvCharacteristic != null && deviceId == ugvDeviceId) {
-      sendData(deviceId, startAutoMode); // Envía el comando de modo automático.
-      isAutomaticMode.value = true; // Activa el estado del modo automático.
+      sendData(deviceId, startAutoMode);
+      isAutomaticMode.value = true;
       _logger.i(
           "Comando de modo automático enviado a $deviceId. Modo automático activado.");
-      isRecording.value =
-          false; // Desactiva la grabación al entrar en modo automático.
+      isRecording.value = false;
     } else {
       Get.snackbar(
           "Advertencia", "UGV no conectado o característica no disponible.");
     }
   }
 
-  //----------------------------------------------------------------------------
+  // ===========================================================================
   // MÉTODOS PRIVADOS DE GESTIÓN INTERNA
-  // No deben ser llamados directamente desde la UI.
-  //----------------------------------------------------------------------------
+  // ===========================================================================
 
-  /// Descubre los servicios y características de un dispositivo conectado.
-  /// Almacena las características clave (UGV y DP) para su uso posterior.
+  /// Descubre servicios y características de un dispositivo
   Future<void> _discoverServices(BluetoothDevice device) async {
     final deviceId = device.remoteId.str;
     final deviceName = device.platformName;
@@ -540,32 +508,25 @@ class BleController extends GetxController {
         for (BluetoothCharacteristic char in service.characteristics) {
           final charUuid = char.uuid.toString().toLowerCase();
 
-          // Identificar característica del Tanari UGV (para comandos)
           if (charUuid == characteristicUuidUGV) {
             ugvCharacteristic = char;
-            connectedCharacteristics[deviceId] =
-                char; // Almacena la característica conectada por su ID.
-            ugvDeviceId = deviceId; // Asigna el ID del dispositivo UGV.
-            _setupNotifications(
-                deviceId, char); // Configurar notificaciones para UGV
+            connectedCharacteristics[deviceId] = char;
+            ugvDeviceId = deviceId;
+            _setupNotifications(deviceId, char);
             _logger.i(
                 'Característica UGV encontrada: ${char.uuid} para $deviceName');
-          }
-          // Identificar característica de notificación del Tanari DP (para recibir datos).
-          else if (charUuid == characteristicUuidPortableNotify) {
+          } else if (charUuid == characteristicUuidPortableNotify) {
             portableCharacteristic = char;
-            connectedCharacteristics[deviceId] =
-                char; // Almacena la característica conectada por su ID.
-            portableDeviceId = deviceId; // Asigna el ID del dispositivo DP.
-            _setupNotifications(
-                deviceId, char); // Configura las notificaciones para el DP.
+            connectedCharacteristics[deviceId] = char;
+            portableDeviceId = deviceId;
+            _setupNotifications(deviceId, char);
             _logger.i(
                 'Característica de notificación portátil encontrada: ${char.uuid} para $deviceName');
           }
         }
       }
     }
-    // Advertencias si las características esperadas no se encuentran.
+
     if (deviceName == deviceNameUGV && ugvCharacteristic == null) {
       _logger
           .w("No se encontró la característica UGV esperada para $deviceName.");
@@ -579,132 +540,22 @@ class BleController extends GetxController {
     }
   }
 
-  /// Configura la escucha de notificaciones (indicates/notify) para una característica dada.
+  /// Configura notificaciones para una característica
   void _setupNotifications(
       String deviceId, BluetoothCharacteristic characteristic) {
-    _valueSubscriptions[deviceId]
-        ?.cancel(); // Cancela cualquier suscripción anterior para este dispositivo.
+    _valueSubscriptions[deviceId]?.cancel();
     _valueSubscriptions[deviceId] =
         characteristic.onValueReceived.listen((value) {
-      final dataString = String.fromCharCodes(value)
-          .trim(); // Convierte los bytes a una cadena y limpia espacios
+      final dataString = String.fromCharCodes(value).trim();
+
       if (characteristic.uuid.toString().toLowerCase() ==
           characteristicUuidPortableNotify) {
-        // Si es la característica del DP, parsea y almacena los datos.
         _parseAndStorePortableData(dataString);
         _logger.i('Datos del Tanari DP ($deviceId): $dataString');
-      }
-      // Procesar datos del UGV
-      else if (characteristic.uuid.toString().toLowerCase() ==
+      } else if (characteristic.uuid.toString().toLowerCase() ==
           characteristicUuidUGV) {
         _logger.d('Datos del Tanari UGV ($deviceId): $dataString');
-
-        // ===================================================================
-        // INICIO: LÓGICA DE PROCESAMIENTO DE DATOS DEL UGV (ACTUALIZADA)
-        // ===================================================================
-
-        // Primero, se verifica si estamos en modo de extracción de datos.
-        if (isExtractingData.value) {
-          if (dataString == 'O') {
-            // Fin de la extracción
-            isExtractingData.value = false;
-            extractionStatus.value = 'completed';
-          } else if (dataString == 'K') {
-            // Base de datos vacía
-            isExtractingData.value = false;
-            extractionStatus.value = 'empty';
-          }
-          // ===================================================================
-          // INICIO DE LA CORRECCIÓN
-          // Solo se añade la línea si contiene ';' (formato de datos de sensores).
-          // Esto evita que los datos de estado en tiempo real (que usan ',') se mezclen.
-          else if (dataString.contains(';')) {
-            // Es una línea de datos de sensores, la añadimos a la lista.
-            ugvDatabaseData.add(dataString);
-          } else {
-            // Se ignora cualquier otra cadena (como el estado) durante la extracción.
-            _logger.d(
-                "Ignorando cadena durante extracción (formato no es de datos): $dataString");
-          }
-          // FIN DE LA CORRECCIÓN
-          // ===================================================================
-          return; // Termina el procesamiento aquí si estábamos extrayendo.
-        }
-
-        // ===================================================================
-        // INICIO: NUEVA LÓGICA PARA CAPTURAR EL INDICADOR DE RUTA
-        // ===================================================================
-        // Si el dato empieza con 'A' seguido de un número, es el indicador de la nueva ruta.
-        if (dataString.startsWith('A') &&
-            int.tryParse(dataString.substring(1)) != null) {
-          _logger.i("Nuevo indicador de ruta recibido del UGV: $dataString");
-          newRouteIndicator.value = dataString;
-          // Resetea el valor después de un momento para que pueda ser detectado como un nuevo evento.
-          Future.delayed(const Duration(milliseconds: 100)).then((_) {
-            if (newRouteIndicator.value == dataString) {
-              newRouteIndicator.value = null;
-            }
-          });
-          return; // Termina el procesamiento aquí para no confundirlo con otros comandos.
-        }
-        // ===================================================================
-        // FIN: NUEVA LÓGICA PARA CAPTURAR EL INDICADOR DE RUTA
-        // ===================================================================
-
-        // Si no estamos extrayendo, procesamos otros tipos de datos.
-        // Si la cadena contiene comas, es la trama de estado principal.
-        if (dataString.contains(',')) {
-          final parts = dataString.split(',');
-          for (String rawPart in parts) {
-            final part = rawPart.trim(); // Limpia espacios de cada parte
-
-            if (part.startsWith('VS:')) {
-              final speedValue = double.tryParse(part.substring(3));
-              if (speedValue != null) {
-                currentSpeed.value = speedValue.round();
-              }
-            } else if (part.startsWith('TE:')) {
-              final waitTimeValue = int.tryParse(part.substring(3));
-              if (waitTimeValue != null) {
-                currentWaitTime.value = waitTimeValue;
-              }
-            } else if (part.startsWith('B:')) {
-              final battery = int.tryParse(part.substring(2));
-              if (battery != null) {
-                batteryLevel.value = battery;
-              }
-            } else if (part.startsWith('M:')) {
-              memoryStatus.value = part.substring(2) == '1';
-            }
-            // ===============================================================
-            // INICIO: PARSEO DE ESTADO DE ACOPLE
-            // ===============================================================
-            else if (part.startsWith('A:')) {
-              isPhysicallyCoupled.value = part.substring(2) == '1';
-            }
-            // ===============================================================
-            // FIN: PARSEO DE ESTADO DE ACOPLE
-            // ===============================================================
-          }
-          // Forzamos la actualización de GetX para asegurar que la UI se reconstruya
-          currentSpeed.refresh();
-          currentWaitTime.refresh();
-          batteryLevel.refresh();
-          memoryStatus.refresh();
-        }
-        // Si es cualquier otra cadena (como 'T'), es un comando de estado.
-        else {
-          receivedData.value = dataString;
-          // Resetea el valor después de un corto tiempo para poder recibir el mismo comando de nuevo.
-          Future.delayed(const Duration(milliseconds: 50)).then((_) {
-            if (receivedData.value == dataString) {
-              receivedData.value = null;
-            }
-          });
-        }
-        // ===================================================================
-        // FIN: LÓGICA DE PROCESAMIENTO DE DATOS DEL UGV (ACTUALIZADA)
-        // ===================================================================
+        _processUgvData(dataString);
       }
     }, onError: (error) {
       _logger.e(
@@ -713,38 +564,135 @@ class BleController extends GetxController {
       Get.snackbar("Error de Datos",
           "Error en la recepción de datos de ${connectedDevices[deviceId]?.platformName ?? deviceId}: ${error.toString()}");
     });
-    characteristic.setNotifyValue(
-        true); // Habilita las notificaciones en la característica.
+
+    characteristic.setNotifyValue(true);
     _logger.i(
         "Notificaciones activadas para ${characteristic.uuid} en $deviceId.");
   }
 
-  /// **Parsea y almacena los datos recibidos del dispositivo Tanari DP.**
-  ///
-  /// Esta función ha sido **actualizada** para manejar la nueva trama de datos que
-  /// incluye el nivel de la batería.
-  ///
-  /// **Formato esperado:** `"CO2;CH4;Temp;Hum;Bat"`
-  /// - `CO2`: Valor de CO2 en ppm.
-  /// - `CH4`: Valor de Metano en ppm.
-  /// - `Temp`: Valor de Temperatura en °C.
-  /// - `Hum`: Valor de Humedad en %.
-  /// - `Bat`: Porcentaje de batería (0-100).
-  ///
-  /// @param data La cadena de texto recibida del dispositivo BLE.
-  // En tu BleController, dentro de _parseAndStorePortableData
+  /// Procesa datos recibidos del UGV
+  void _processUgvData(String dataString) {
+    if (isExtractingData.value) {
+      _processExtractionData(dataString);
+      return;
+    }
+
+    if (dataString.startsWith('A') &&
+        int.tryParse(dataString.substring(1)) != null) {
+      _logger.i("Nuevo indicador de ruta recibido del UGV: $dataString");
+      newRouteIndicator.value = dataString;
+      Future.delayed(const Duration(milliseconds: 100)).then((_) {
+        if (newRouteIndicator.value == dataString) {
+          newRouteIndicator.value = null;
+        }
+      });
+      return;
+    }
+
+    if (dataString.length == 1) {
+      switch (dataString) {
+        case obstacleDetected:
+          obstacleAlert.value = true;
+          break;
+        case arrivedAtPointSignal:
+          arrivedAtPoint.value = activePointNumber.value;
+          Future.delayed(const Duration(seconds: 2))
+              .then((_) => arrivedAtPoint.value = null);
+          break;
+        case endAutoMode:
+          receivedData.value = dataString;
+          break;
+      }
+      return;
+    }
+
+    if (dataString.contains(',')) {
+      _processStatusData(dataString);
+    } else {
+      receivedData.value = dataString;
+      Future.delayed(const Duration(milliseconds: 50)).then((_) {
+        if (receivedData.value == dataString) {
+          receivedData.value = null;
+        }
+      });
+    }
+  }
+
+  /// Procesa datos de extracción
+  void _processExtractionData(String dataString) {
+    if (dataString == 'O') {
+      isExtractingData.value = false;
+      extractionStatus.value = 'completed';
+    } else if (dataString == 'K') {
+      isExtractingData.value = false;
+      extractionStatus.value = 'empty';
+    } else if (dataString.contains(';')) {
+      ugvDatabaseData.add(dataString);
+    } else {
+      _logger.d(
+          "Ignorando cadena durante extracción (formato no es de datos): $dataString");
+    }
+  }
+
+  /// Procesa datos de estado
+  void _processStatusData(String dataString) {
+    final parts = dataString.split(',');
+    for (String rawPart in parts) {
+      final part = rawPart.trim();
+
+      if (part.startsWith('VS:')) {
+        final speedValue = double.tryParse(part.substring(3));
+        if (speedValue != null) currentSpeed.value = speedValue.round();
+      } else if (part.startsWith('TE:')) {
+        final waitTimeValue = int.tryParse(part.substring(3));
+        if (waitTimeValue != null) currentWaitTime.value = waitTimeValue;
+      } else if (part.startsWith('B:')) {
+        final battery = int.tryParse(part.substring(2));
+        if (battery != null) batteryLevel.value = battery;
+      } else if (part.startsWith('M:')) {
+        memoryStatus.value = part.substring(2) == '1';
+      } else if (part.startsWith('A:')) {
+        isPhysicallyCoupled.value = part.substring(2) == '1';
+      } else if (part.startsWith('E:')) {
+        evasionModeActive.value = part.substring(2) == '1';
+      } else if (part.startsWith('R:')) {
+        activeRouteNumber.value = int.tryParse(part.substring(2)) ?? 0;
+      } else if (part.startsWith('P:')) {
+        final newPoint = int.tryParse(part.substring(2)) ?? 0;
+        if (newPoint != activePointNumber.value) {
+          activePointNumber.value = newPoint;
+          arrivedAtPoint.value = null;
+        }
+      }
+    }
+
+    currentSpeed.refresh();
+    currentWaitTime.refresh();
+    batteryLevel.refresh();
+    memoryStatus.refresh();
+  }
+
+  /// Parsea y almacena datos del dispositivo portátil
   void _parseAndStorePortableData(String data) {
     try {
       final List<String> parts = data.split(';');
-      // Si el formato es "CO2;CH4;Temp;Hum" o "CO2;CH4;Temp;Hum;Pres"
-      if (parts.length >= 4) {
-        // Cambiado a >=4 para ser flexible con o sin presión
+      if (parts.length >= 9) {
         portableData['co2'] = parts[0];
         portableData['ch4'] = parts[1];
         portableData['temperature'] = parts[2];
         portableData['humidity'] = parts[3];
 
-        //*NUEVO**: Parsea y actualiza el nivel de batería del DP.
+        final battery = int.tryParse(parts[4]);
+        if (battery != null) portableBatteryLevel.value = battery;
+
+        final lat = double.tryParse(parts[5]);
+        final lon = double.tryParse(parts[6]);
+        final fix = int.tryParse(parts[8]);
+
+        if (lat != null) latitude.value = lat;
+        if (lon != null) longitude.value = lon;
+        if (fix != null) gpsHasFix.value = (fix == 1);
+
         if (parts.length >= 5) {
           final battery = int.tryParse(parts[4]);
           if (battery != null) {
@@ -762,20 +710,17 @@ class BleController extends GetxController {
     }
   }
 
-  /// Inicia un temporizador para leer el RSSI del dispositivo conectado cada 5 segundos.
+  /// Inicia actualizaciones periódicas de RSSI
   void _startRssiUpdates(BluetoothDevice device) {
     final deviceId = device.remoteId.str;
-    _rssiTimers[deviceId]
-        ?.cancel(); // Cancela cualquier temporizador RSSI existente para este dispositivo.
+    _rssiTimers[deviceId]?.cancel();
     _rssiTimers[deviceId] =
         Timer.periodic(const Duration(seconds: 5), (_) async {
       try {
-        // Solo intenta leer RSSI si el dispositivo sigue conectado.
         if (connectedDevices[deviceId] == device && device.isConnected) {
           final rssiValue = await device.readRssi();
-          rssiValues[deviceId] =
-              rssiValue; // Actualiza el valor RSSI en el mapa.
-          // Actualiza el RSSI y el estado de conexión en la lista foundDevices para que la UI se refresque.
+          rssiValues[deviceId] = rssiValue;
+
           final index = foundDevices.indexWhere((d) => d.device == device);
           if (index != -1) {
             foundDevices[index] = foundDevices[index]
@@ -784,31 +729,26 @@ class BleController extends GetxController {
           }
           _logger.d('RSSI para ${device.platformName}: $rssiValue');
         } else {
-          // Si el dispositivo ya no está conectado, cancela el temporizador.
           _logger.w(
               'Dispositivo $deviceId no está conectado, cancelando actualizaciones de RSSI.');
           _rssiTimers[deviceId]?.cancel();
         }
       } catch (e) {
         _logger.e('Error al leer RSSI para $deviceId: ${e.toString()}');
-        _rssiTimers[deviceId]
-            ?.cancel(); // Cancela el temporizador en caso de error.
+        _rssiTimers[deviceId]?.cancel();
       }
     });
   }
 
-  /// Monitorea el estado de conexión de un dispositivo específico.
-  /// Si el dispositivo se desconecta, llama a `_cleanupDeviceConnection`.
+  /// Monitorea el estado de conexión de un dispositivo
   void _monitorConnectionState(BluetoothDevice device) {
     final deviceId = device.remoteId.str;
     final deviceName = device.platformName;
-    _connectionSubscriptions[deviceId]
-        ?.cancel(); // Cancela suscripciones anteriores.
+    _connectionSubscriptions[deviceId]?.cancel();
     _connectionSubscriptions[deviceId] = device.connectionState.listen((state) {
       _logger.i("Estado de conexión de $deviceName ($deviceId): $state");
       if (state == BluetoothConnectionState.disconnected) {
-        _cleanupDeviceConnection(
-            deviceId); // Limpia recursos al detectar la desconexión.
+        _cleanupDeviceConnection(deviceId);
         if (Get.isSnackbarOpen) Get.back();
         Get.snackbar(
           "Desconectado",
@@ -824,72 +764,58 @@ class BleController extends GetxController {
       if (Get.isSnackbarOpen) Get.back();
       Get.snackbar("Error de Conexión",
           "Problema con la conexión de $deviceName: ${error.toString()}");
-      _cleanupDeviceConnection(
-          deviceId); // Limpia recursos en caso de error en el monitoreo.
+      _cleanupDeviceConnection(deviceId);
     });
   }
 
-  /// Limpia todos los recursos (timers, suscripciones, estados) asociados a un dispositivo.
+  /// Limpia recursos asociados a un dispositivo
   void _cleanupDeviceConnection(String deviceId) {
     _logger.i('Limpiando recursos para el dispositivo: $deviceId');
 
-    _rssiTimers[deviceId]?.cancel(); // Cancela el timer RSSI.
+    _rssiTimers[deviceId]?.cancel();
     _rssiTimers.remove(deviceId);
-    _valueSubscriptions[deviceId]
-        ?.cancel(); // Cancela la suscripción a valores.
+    _valueSubscriptions[deviceId]?.cancel();
     _valueSubscriptions.remove(deviceId);
-    _connectionSubscriptions[deviceId]
-        ?.cancel(); // Cancela la suscripción de conexión.
+    _connectionSubscriptions[deviceId]?.cancel();
     _connectionSubscriptions.remove(deviceId);
 
-    // Elimina el dispositivo de los mapas observados.
     connectedDevices.remove(deviceId);
     connectedCharacteristics.remove(deviceId);
     rssiValues.remove(deviceId);
 
-    // Si el dispositivo limpiado era el UGV o Portable, resetea sus IDs y características específicas.
     if (ugvDeviceId == deviceId) {
       ugvDeviceId = null;
       ugvCharacteristic = null;
       ledStateUGV.value = false;
       isRecording.value = false;
       isAutomaticMode.value = false;
-      isUgvConnected.value = false; // Actualiza el estado de conexión del UGV.
-      receivedData.value = null; // Limpiar datos recibidos del UGV
-      // =======================================================================
-      // INICIO: LIMPIEZA DE ESTADO DE ACOPLE
-      // =======================================================================
+      isUgvConnected.value = false;
+      receivedData.value = null;
       isPhysicallyCoupled.value = false;
-      // =======================================================================
-      // FIN: LIMPIEZA DE ESTADO DE ACOPLE
-      // =======================================================================
-
-      // =======================================================================
-      // INICIO: LIMPIEZA DE ESTADOS DE EXTRACCIÓN
-      // =======================================================================
       isExtractingData.value = false;
+      evasionModeActive.value = false;
+      activeRouteNumber.value = 0;
+      activePointNumber.value = 0;
       ugvDatabaseData.clear();
       extractionStatus.value = null;
-      // =======================================================================
-      // FIN: LIMPIEZA DE ESTADOS DE EXTRACCIÓN
-      // =======================================================================
     }
+
     if (portableDeviceId == deviceId) {
       isPortableConnected.value = false;
       portableDeviceId = null;
       portableCharacteristic = null;
-      portableData.clear(); // Limpia los datos del DP.
+      portableData.clear();
+      latitude.value = 0.0;
+      longitude.value = 0.0;
+      gpsHasFix.value = false;
     }
-    // Asegurarse de que el FoundDevice correspondiente en la lista principal se actualice
-    // para reflejar que ya no está conectado. No lo removemos de foundDevices
-    // para que siga apareciendo en la lista, permitiendo la reconexión.
+
     final index =
         foundDevices.indexWhere((fd) => fd.device.remoteId.str == deviceId);
     if (index != -1) {
-      // Actualiza el estado de conexión del FoundDevice a false y resetea RSSI
       foundDevices[index] =
           foundDevices[index].copyWith(isConnected: false, rssi: null);
-      foundDevices.refresh(); // Forzar la actualización de la UI
+      foundDevices.refresh();
     }
 
     _logger.i('Recursos limpiados para $deviceId.');
@@ -898,9 +824,8 @@ class BleController extends GetxController {
   @override
   void onClose() {
     _logger.i('Cerrando BleController y liberando recursos...');
-    stopScan(); // Detiene cualquier escaneo activo.
+    stopScan();
 
-    // Cancela todos los timers y suscripciones restantes.
     for (var timer in _rssiTimers.values) {
       timer.cancel();
     }
@@ -911,23 +836,16 @@ class BleController extends GetxController {
       sub.cancel();
     }
 
-    // Desconecta activamente todos los dispositivos que aún estén conectados.
-    // Usar toList() para evitar modificar la colección mientras se itera.
     for (final deviceId in connectedDevices.keys.toList()) {
-      // No llamamos a disconnectDevice aquí porque ya estamos en el proceso de cerrar el controlador
-      // y disconnectDevice a su vez llama a _cleanupDeviceConnection y puede causar un bucle o errores.
-      // Simplemente desconectamos directamente.
       connectedDevices[deviceId]?.disconnect();
     }
 
-    // Limpia todas las listas y mapas observados.
     foundDevices.clear();
     connectedDevices.clear();
     connectedCharacteristics.clear();
     rssiValues.clear();
     portableData.clear();
 
-    // Resetea todas las variables específicas del controlador.
     ugvDeviceId = null;
     ugvCharacteristic = null;
     portableDeviceId = null;
@@ -938,8 +856,7 @@ class BleController extends GetxController {
     isUgvConnected.value = false;
     isPortableConnected.value = false;
 
-    super
-        .onClose(); // Llama a onClose del padre para la limpieza final de GetX.
+    super.onClose();
     _logger.i('BleController cerrado.');
   }
 }

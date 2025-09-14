@@ -48,6 +48,7 @@ abstract class Routes {
   static const String comunicacionBle = '/comunicacionBle';
   static const String modoMonitoreo = '/modoMonitoreo';
   static const String modoUgv = '/modoUgv';
+  static const String ubicacionGps = '/ubicacionGps';
   static const String mapaTanari = '/mapaTanari';
 }
 
@@ -143,7 +144,9 @@ class AppPages {
     ),
     GetPage(
       name: Routes.mapaTanari,
-      page: () => MapScreen(),
+      page: () => MapTanariScreen(
+        sessionId: '',
+      ),
       transition: Transition.fadeIn,
     ),
   ];

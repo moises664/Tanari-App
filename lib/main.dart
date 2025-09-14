@@ -22,6 +22,9 @@ const String supabaseUrl = 'https://pfhteyhxvetjhaitlucx.supabase.co';
 const String supabaseAnonKey =
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBmaHRleWh4dmV0amhhaXRsdWN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkwNzMxMjcsImV4cCI6MjA2NDY0OTEyN30.93Ty5Z9JdUhHGFAgJkRW2yina0-WKkahqPC6QY9WTHk';
 
+const String mapbox_access_token =
+    "pk.eyJ1IjoibW9pc2Vzcm0wMCIsImEiOiJjbWVwYTFqemEwZDM3MmlxNnpudWV3MXdqIn0.NbT4KIYybi1fBGc21Xjvew";
+
 final _logger = Logger('Main'); // Logger para la función principal.
 
 /// Punto de entrada principal de la aplicación Flutter.
@@ -30,9 +33,8 @@ void main() async {
   // 1. Asegura que los bindings de Flutter estén inicializados.
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Configurar el token de Mapbox antes de iniciar la app
-  MapboxOptions.setAccessToken(
-      "pk.eyJ1IjoibW9pc2Vzcm0wMCIsImEiOiJjbWVwYTFqemEwZDM3MmlxNnpudWV3MXdqIn0.NbT4KIYybi1fBGc21Xjvew");
+  // Configura el token de acceso para toda la aplicación
+  MapboxOptions.setAccessToken(mapbox_access_token);
 
   // 2. Configura el sistema de logging para la aplicación.
   _configureLogging();

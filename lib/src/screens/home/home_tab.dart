@@ -38,7 +38,7 @@ class HomeTab extends StatelessWidget {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w300,
-                color: AppColors.textPrimary.withOpacity(0.7),
+                color: AppColors.textPrimary.withAlpha(180),
               ),
             ),
           ],
