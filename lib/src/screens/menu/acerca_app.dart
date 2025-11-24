@@ -10,14 +10,23 @@ import 'package:url_launcher/url_launcher.dart';
 class AcercaApp extends StatelessWidget {
   const AcercaApp({super.key});
 
+  // ---------------------------------------------------------------------------
+  // CONFIGURACIÓN DEL ENLACE DEL MANUAL
+  // ---------------------------------------------------------------------------
+  // Enlace actualizado al Manual de Usuario en OneDrive
+  static const String _manualUrl =
+      'https://github.com/moises664/Manual-de-Usuario-Tanari/raw/7ff9daa613521bc4b4c539ca17e9c2b5246d80a1/Manual%20T%C3%A9cnico%20de%20Tanari_Version%20Usuario.pdf';
+
   /// Función para abrir un enlace URL en el navegador externo.
   /// Utilizada para los créditos y enlaces a recursos.
   Future<void> _launchURL(String url) async {
     final Uri uri = Uri.parse(url);
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      // Manejo de error si no se puede abrir el enlace.
-      // En una app real, aquí se podría mostrar un Get.snackbar o un diálogo.
-      debugPrint('No se pudo lanzar $url');
+    try {
+      if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+        debugPrint('No se pudo lanzar $url');
+      }
+    } catch (e) {
+      debugPrint('Error al intentar lanzar la URL: $e');
     }
   }
 
@@ -36,7 +45,7 @@ class AcercaApp extends StatelessWidget {
           ),
         ),
         backgroundColor: AppColors.primary,
-        iconTheme: IconThemeData(color: AppColors.backgroundWhite),
+        iconTheme: const IconThemeData(color: AppColors.backgroundWhite),
         elevation: 2,
       ),
       body: SingleChildScrollView(
@@ -56,12 +65,78 @@ class AcercaApp extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // Sección interactiva con paneles desplegables.
+            // Sección interactiva con paneles desplegables (Manual Resumido)
+            Text(
+              'Información General',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 10),
             _buildInteractiveManual(theme),
 
             const SizedBox(height: 20),
+
+            // -------------------------------------------------------
+            // SECCIÓN: DESCARGAS
+            // -------------------------------------------------------
+            Text(
+              'Recursos',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _buildDownloadsCard(theme),
+
+            const SizedBox(height: 20),
+
             // Card con los créditos de los desarrolladores.
             _buildCreditsCard(theme),
+            const SizedBox(height: 30),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Construye la tarjeta de descargas para el Manual de Usuario.
+  Widget _buildDownloadsCard(ThemeData theme) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      color: AppColors.backgroundLight,
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: Column(
+          children: [
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child:
+                    const Icon(Icons.picture_as_pdf, color: AppColors.primary),
+              ),
+              title: const Text(
+                'Manual de Usuario Completo',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              subtitle: const Text(
+                'Descarga la guía detallada en formato PDF.',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              trailing:
+                  const Icon(Icons.download_rounded, color: AppColors.primary),
+              onTap: () => _launchURL(_manualUrl),
+            ),
           ],
         ),
       ),
@@ -286,7 +361,7 @@ class AcercaApp extends StatelessWidget {
           ),
         ),
         IconButton(
-          icon: const Icon(Icons.code), // O un logo de GitHub si lo tuvieras
+          icon: const Icon(Icons.code),
           color: AppColors.textSecondary,
           tooltip: 'Ver en GitHub',
           onPressed: () => _launchURL(githubUrl),

@@ -16,15 +16,15 @@ import 'package:tanari_app/src/services/api/operation_data_service.dart';
 import 'package:tanari_app/src/services/api/ugv_service.dart';
 import 'package:tanari_app/src/services/api/user_profile_service.dart';
 
-const appTitle = 'TAnaRi';
+// Título de la aplicación.
+const appTitle = 'Tanari';
 // URL y clave anónima de Supabase para la conexión a la base de datos.
 const String supabaseUrl = 'https://pfhteyhxvetjhaitlucx.supabase.co';
 const String supabaseAnonKey =
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBmaHRleWh4dmV0amhhaXRsdWN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkwNzMxMjcsImV4cCI6MjA2NDY0OTEyN30.93Ty5Z9JdUhHGFAgJkRW2yina0-WKkahqPC6QY9WTHk';
-
+//Tpen de acceso de Mapbox para la aplicación.
 const String mapbox_access_token =
     "pk.eyJ1IjoibW9pc2Vzcm0wMCIsImEiOiJjbWVwYTFqemEwZDM3MmlxNnpudWV3MXdqIn0.NbT4KIYybi1fBGc21Xjvew";
-
 final _logger = Logger('Main'); // Logger para la función principal.
 
 /// Punto de entrada principal de la aplicación Flutter.
@@ -52,7 +52,6 @@ void main() async {
     // Captura y registra cualquier error crítico durante la inicialización.
     _logger.severe('Error crítico durante la inicialización de la aplicación',
         e, stackTrace);
-    // Podrías considerar mostrar una UI de error más amigable aquí si la app no puede iniciar.
   }
 }
 

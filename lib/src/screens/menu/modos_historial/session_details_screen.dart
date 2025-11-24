@@ -991,9 +991,6 @@ class SessionDetailsScreen extends StatelessWidget {
       maxTemp += 5;
     }
 
-    // Eje Y derecho para Humedad
-    double minHum = 0, maxHum = 100; // Humedad es siempre 0-100%
-
     return SizedBox(
       height: 400,
       child: Card(

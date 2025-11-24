@@ -20,12 +20,12 @@ android {
 
     defaultConfig {
         applicationId = "com.tanari_app"
-        minSdk = 21
+        minSdk = 29
         renderscriptTargetApi = 21  // ✅ Corregido con =
         renderscriptSupportModeEnabled = true  // ✅ Corregido con =
         targetSdk = 35
         versionCode = 1
-        versionName = "1.2.0"
+        versionName = "1.6.2"
     }
 
     buildTypes {

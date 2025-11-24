@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:tanari_app/src/controllers/bluetooth/ble.controller.dart';
 import 'package:tanari_app/src/core/app_colors.dart';
@@ -14,6 +13,9 @@ class ModoMonitoreo extends StatefulWidget {
 }
 
 class _ModoDPState extends State<ModoMonitoreo> {
+  //----------------------------------------------------------------------------
+  //   INYECCION DE DEPNDENCIAS Y CONTROLADORES
+  //----------------------------------------------------------------------------
   final BleController _bleController = Get.find<BleController>();
   final OperationDataService _operationDataService =
       Get.find<OperationDataService>();

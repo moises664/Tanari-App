@@ -34,8 +34,12 @@ class _AdminScreenState extends State<AdminScreen>
   }
 
   void _checkAdminStatus() {
-    final currentUser = _userProfileService.currentProfile.value;
-    _isAdmin.value = currentUser?.isAdmin ?? false;
+    // Escuchar cambios en el perfil del usuario actual para actualizar el estado de admin
+    ever(_userProfileService.currentProfile, (UserProfile? profile) {
+      _isAdmin.value = profile?.isAdmin ?? false;
+    });
+    // Comprobar el estado inicial
+    _isAdmin.value = _userProfileService.currentProfile.value?.isAdmin ?? false;
   }
 
   void _loadInitialData() {
@@ -76,18 +80,27 @@ class _AdminScreenState extends State<AdminScreen>
   /// Pantalla de acceso denegado
   Widget _buildAccessDeniedScreen() {
     return Scaffold(
-      appBar: AppBar(title: const Text('Acceso denegado')),
+      appBar: AppBar(title: const Text('Acceso Denegado')),
       body: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.block, size: 64, color: Colors.red),
-            SizedBox(height: 20),
-            Text(
-              'No tienes permisos de administrador',
-              style: TextStyle(fontSize: 18),
-            ),
-          ],
+        child: Padding(
+          padding: EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.gpp_bad_outlined, size: 80, color: Colors.redAccent),
+              SizedBox(height: 20),
+              Text(
+                'No tienes permisos para acceder a esta sección.',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 10),
+              Text(
+                'Esta área es exclusiva para administradores del sistema.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -95,26 +108,47 @@ class _AdminScreenState extends State<AdminScreen>
 
   /// Pestaña de gestión de usuarios
   Widget _buildUserManagementTab() {
-    return Obx(() {
-      if (_adminService.isLoadingUsers.value) {
-        return const Center(child: CircularProgressIndicator());
-      }
-
-      return Column(
+    return RefreshIndicator(
+      onRefresh: _adminService.fetchAllUsers,
+      child: Column(
         children: [
-          _buildAddUserButton(),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _adminService.allUsers.length,
-              itemBuilder: (context, index) {
-                final user = _adminService.allUsers[index];
-                return _buildUserCard(user);
-              },
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _showAddUserDialog(context),
+                icon: const Icon(Icons.person_add_alt_1_outlined),
+                label: const Text('Añadir Nuevo Usuario'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
             ),
           ),
+          Expanded(
+            child: Obx(() {
+              if (_adminService.isLoadingUsers.value &&
+                  _adminService.allUsers.isEmpty) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (_adminService.allUsers.isEmpty) {
+                return const Center(child: Text('No se encontraron usuarios.'));
+              }
+              return ListView.builder(
+                itemCount: _adminService.allUsers.length,
+                itemBuilder: (context, index) {
+                  final user = _adminService.allUsers[index];
+                  return _buildUserCard(user);
+                },
+              );
+            }),
+          ),
         ],
-      );
-    });
+      ),
+    );
   }
 
   /// Botón para añadir nuevo usuario
@@ -134,37 +168,44 @@ class _AdminScreenState extends State<AdminScreen>
     );
   }
 
-  /// Tarjeta de usuario
+  /// Tarjeta de usuario con diseño mejorado
   Widget _buildUserCard(UserProfile user) {
+    bool isCurrentUser =
+        user.id == _userProfileService.currentProfile.value?.id;
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor:
               user.isAdmin ? AppColors.primary : AppColors.secondary,
           child: Icon(
-            user.isAdmin ? Icons.admin_panel_settings : Icons.person,
-            color: Colors.white,
-          ),
+              user.isAdmin ? Icons.shield_outlined : Icons.person_outline,
+              color: Colors.white),
         ),
         title: Text(user.username,
             style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(user.email),
+        subtitle: Text(user.email, style: const TextStyle(fontSize: 12)),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: Icon(
-                user.isAdmin ? Icons.star : Icons.star_border,
-                color: user.isAdmin ? Colors.amber : Colors.grey,
+            // No permitir que un admin se quite el rol a sí mismo
+            if (!isCurrentUser)
+              IconButton(
+                icon: Icon(user.isAdmin ? Icons.star : Icons.star_border,
+                    color: user.isAdmin ? Colors.amber : Colors.grey),
+                tooltip: 'Hacer Administrador',
+                onPressed: () =>
+                    _adminService.toggleUserAdminStatus(user.id, user.isAdmin),
               ),
-              onPressed: () =>
-                  _adminService.toggleUserAdminStatus(user.id, user.isAdmin),
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete, color: Colors.red),
-              onPressed: () => _showDeleteUserDialog(user),
-            ),
+            // No permitir que un admin se elimine a sí mismo
+            if (!isCurrentUser)
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                tooltip: 'Eliminar Usuario',
+                onPressed: () => _showDeleteUserDialog(user),
+              ),
           ],
         ),
         onTap: () {

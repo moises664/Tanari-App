@@ -46,7 +46,7 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 
-	<!-- INICIO DE LA NUEVA SECCIÓN DE DEEP LINKS PARA SUPABASE -->
+	<!-- INICIO DE SECCIÓN DE DEEP LINKS PARA SUPABASE -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -54,7 +54,7 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				 <string>tanariapp</string> <!-- Tu esquema de deep link -->
+				 <string>tanariapp</string> <!-- Esquema de deep link -->
 			</array>
 		</dict>
 	</array><!-- SECCIÓN DE DEEP LINKS OPTIMIZADA -->
@@ -99,8 +99,6 @@
     </dict>
     <!-- FIN DE CONFIGURACIÓN iOS 13+ -->
 
-	<!-- FIN DE LA NUEVA SECCIÓN DE DEEP LINKS -->
-
 	<!-- INICIO DE PERMISOS DE PRIVACIDAD PARA IMAGEN Y CÁMARA (para subir avatar) -->
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Esta aplicación necesita acceso a tu biblioteca de fotos para seleccionar y subir una foto de perfil.</string>
@@ -130,8 +128,11 @@
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Esta aplicación necesita acceso a Bluetooth para conectarse a dispositivos periféricos cercanos.</string>
 	<!-- FIN DE PERMISOS DE PRIVACIDAD PARA BLUETOOTH -->
+
+	<!-- INICIO DE PERMISOS DE USO DE LA API DE MAPBOX -->
 	<key>MBXAccessToken</key>
 	<string>pk.eyJ1IjoibW9pc2Vzcm0wMCIsImEiOiJjbWVwYTFqemEwZDM3MmlxNnpudWV3MXdqIn0.NbT4KIYybi1fBGc21Xjvew</string>
+	<!-- FIN DE PERMISOS DE USO DE LA API DE MAPBOX -->
 
 </dict>
 </plist>

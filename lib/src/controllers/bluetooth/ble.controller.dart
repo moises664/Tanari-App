@@ -49,8 +49,6 @@ class BleController extends GetxController {
   static const String startRecording = 'G';
   static const String stopRecording = 'N';
   static const String startAutoMode = 'A';
-  static const String toggleLedOn = 'H';
-  static const String toggleLedOff = 'L';
   static const String recordPoint = 'W';
   static const String endRecording = 'E';
   static const String extractData = 'X';
@@ -86,7 +84,6 @@ class BleController extends GetxController {
   final isScanning = false.obs;
 
   // Estados del UGV
-  final ledStateUGV = false.obs;
   final isRecording = false.obs;
   final isAutomaticMode = false.obs;
 
@@ -429,12 +426,6 @@ class BleController extends GetxController {
         print('Dato enviado a $deviceId: $data');
       }
       _logger.i('Dato enviado a $deviceId: $data');
-
-      if (deviceId == ugvDeviceId) {
-        if (data == toggleLedOn || data == toggleLedOff) {
-          ledStateUGV.value = data == toggleLedOn;
-        }
-      }
     } catch (e) {
       _logger.e("Error al enviar datos a $deviceId: $e");
       if (Get.isSnackbarOpen) Get.back();
@@ -786,7 +777,6 @@ class BleController extends GetxController {
     if (ugvDeviceId == deviceId) {
       ugvDeviceId = null;
       ugvCharacteristic = null;
-      ledStateUGV.value = false;
       isRecording.value = false;
       isAutomaticMode.value = false;
       isUgvConnected.value = false;
@@ -850,7 +840,6 @@ class BleController extends GetxController {
     ugvCharacteristic = null;
     portableDeviceId = null;
     portableCharacteristic = null;
-    ledStateUGV.value = false;
     isRecording.value = false;
     isAutomaticMode.value = false;
     isUgvConnected.value = false;

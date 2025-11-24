@@ -386,8 +386,8 @@ class OperationDataService extends GetxService {
       // 3. Insertar los datos en la nueva tabla
       if (readingsToInsert.isNotEmpty) {
         await _supabaseClient
-            .from('data_recuperada_ugv')
-            .insert(readingsToInsert);
+            .from('data_recuperada_ugv') // Inserción en la tabla de telemetría
+            .insert(readingsToInsert); // Inserción del lote de datos (JSON)
         _logger.i(
             "${readingsToInsert.length} registros de datos recuperados han sido subidos a la sesión ${session.id}.");
         Get.snackbar("Sincronización Exitosa",

@@ -52,7 +52,7 @@ class AdminService extends GetxService {
     }
   }
 
-  /// Crea un nuevo usuario en el sistema
+  /// Crea un nuevo usuario invocando la Edge Function segura.
   Future<void> addNewUser({
     required String email,
     required String password,
@@ -61,61 +61,71 @@ class AdminService extends GetxService {
   }) async {
     isLoadingUsers.value = true;
     try {
-      _logger.info('Creando usuario: $email (Admin: $isAdmin)');
+      _logger.info('Invocando Edge Function "create-user" para: $email');
 
-      final response = await _supabaseClient.auth.admin.createUser(
-        AdminUserAttributes(
-          email: email,
-          password: password,
-          userMetadata: {'username': username, 'is_admin': isAdmin},
-          emailConfirm: true,
-        ),
+      final response = await _supabaseClient.functions.invoke(
+        'create-user', // Nombre de la Edge Function
+        body: {
+          'email': email,
+          'password': password,
+          'username': username,
+          'makeAdmin': isAdmin, // Parámetro para crear el usuario como admin
+        },
       );
 
-      if (response.user == null) {
-        throw Exception('Fallo en la creación del usuario');
+      if (response.status != 200) {
+        // Si la función devuelve un error, lo mostramos.
+        final errorMessage =
+            response.data['error'] ?? 'Error desconocido desde la función.';
+        throw Exception(errorMessage);
       }
 
       await _logAdminAction(
         actionType: 'user_create',
-        targetId: response.user!.id,
-        description: 'Usuario creado: $email',
+        description: 'Usuario creado vía Edge Function: $email',
       );
 
-      _showSuccessSnackbar(
-          'Usuario creado', 'El usuario $username fue creado exitosamente');
-      await fetchAllUsers();
-    } on AuthException catch (e, stackTrace) {
-      _logger.severe('Error de autenticación: ${e.message}', e, stackTrace);
-      _showErrorSnackbar('Error al crear usuario', e.message);
+      _showSuccessSnackbar('Usuario Creado',
+          'Se ha enviado un correo de confirmación a $email.');
+      await fetchAllUsers(); // Refrescar la lista de usuarios
     } catch (e, stackTrace) {
-      _logger.severe('Error inesperado: $e', e, stackTrace);
-      _showErrorSnackbar('Error al crear usuario', 'Error desconocido');
+      _logger.severe(
+          'Error al crear usuario vía Edge Function: $e', e, stackTrace);
+      _showErrorSnackbar('Error al Crear Usuario', e.toString());
     } finally {
       isLoadingUsers.value = false;
     }
   }
 
-  /// Elimina un usuario del sistema
+  /// Elimina un usuario invocando la Edge Function segura.
   Future<void> deleteUser(String userId) async {
     isLoadingUsers.value = true;
     try {
-      _logger.info('Eliminando usuario: $userId');
-      await _supabaseClient.auth.admin.deleteUser(userId);
+      _logger.info('Invocando Edge Function "delete-user" para el ID: $userId');
+
+      final response = await _supabaseClient.functions.invoke(
+        'delete-user', // Nombre de la Edge Function
+        body: {'user_id': userId}, // Enviamos el ID del usuario a eliminar
+      );
+
+      if (response.status != 200) {
+        final errorMessage =
+            response.data['error'] ?? 'Error al eliminar usuario.';
+        throw Exception(errorMessage);
+      }
+
       await _logAdminAction(
         actionType: 'user_delete',
         targetId: userId,
-        description: 'Usuario eliminado',
+        description: 'Usuario eliminado vía Edge Function',
       );
       _showSuccessSnackbar(
-          'Usuario eliminado', 'El usuario fue eliminado exitosamente');
-      await fetchAllUsers();
-    } on AuthException catch (e, stackTrace) {
-      _logger.severe('Error de autenticación: ${e.message}', e, stackTrace);
-      _showErrorSnackbar('Error al eliminar usuario', e.message);
+          'Usuario Eliminado', 'El usuario fue eliminado exitosamente.');
+      await fetchAllUsers(); // Refrescar la lista de usuarios
     } catch (e, stackTrace) {
-      _logger.severe('Error inesperado: $e', e, stackTrace);
-      _showErrorSnackbar('Error al eliminar usuario', 'Error desconocido');
+      _logger.severe(
+          'Error al eliminar usuario vía Edge Function: $e', e, stackTrace);
+      _showErrorSnackbar('Error al Eliminar', e.toString());
     } finally {
       isLoadingUsers.value = false;
     }
@@ -127,6 +137,7 @@ class AdminService extends GetxService {
     try {
       _logger
           .info('Cambiando estado de admin para $userId a ${!currentStatus}');
+      // La política RLS 'Admins can update any profile' permite esta operación.
       await _supabaseClient
           .from('profiles')
           .update({'is_admin': !currentStatus}).eq('id', userId);
